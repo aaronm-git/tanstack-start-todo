@@ -1,0 +1,29 @@
+{
+  "projectName": "tanstack-start-todo",
+  "mode": "file-router",
+  "typescript": true,
+  "tailwind": true,
+  "packageManager": "pnpm",
+  "addOnOptions": {
+    "drizzle": {
+      "database": "postgresql"
+    }
+  },
+  "git": true,
+  "version": 1,
+  "framework": "react-cra",
+  "chosenAddOns": [
+    "eslint",
+    "netlify",
+    "start",
+    "drizzle",
+    "shadcn",
+    "ai",
+    "tanstack-query",
+    "form",
+    "clerk",
+    "sentry",
+    "compiler",
+    "store"
+  ]
+}
