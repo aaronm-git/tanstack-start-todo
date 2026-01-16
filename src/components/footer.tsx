@@ -1,4 +1,4 @@
-import { Github, ExternalLink } from 'lucide-react'
+import { Github, ExternalLink, Linkedin } from 'lucide-react'
 
 export function Footer() {
   return (
@@ -23,6 +23,16 @@ export function Footer() {
           >
             <span>Website</span>
             <ExternalLink className="h-3 w-3" />
+          </a>
+          <span className="text-muted-foreground/50">•</span>
+          <a
+            href="https://linkedin.com/in/aaronmolinag"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1.5 hover:text-foreground transition-colors"
+          >
+            <Linkedin className="h-3 w-3" />
+            <span>LinkedIn</span>
           </a>
         </div>
       </div>

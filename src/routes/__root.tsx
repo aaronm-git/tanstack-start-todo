@@ -52,7 +52,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
       <head>
         <HeadContent />
       </head>
-      <body className="pb-12">
+      <body className="pb-12 h-full overflow-hidden">
         <ThemeProvider defaultTheme="system" storageKey="tanstack-todo-theme">
           {children}
           <Footer />
