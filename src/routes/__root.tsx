@@ -5,8 +5,11 @@ import {
 } from '@tanstack/react-router'
 import { TanStackRouterDevtoolsPanel } from '@tanstack/react-router-devtools'
 import { TanStackDevtools } from '@tanstack/react-devtools'
+import { Toaster } from 'sonner'
 
 import AiDevtools from '../lib/ai-devtools'
+import { ThemeProvider } from '../components/theme-provider'
+import { Footer } from '../components/footer'
 
 import TanStackQueryDevtools from '../integrations/tanstack-query/devtools'
 
@@ -45,25 +48,29 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
 
 function RootDocument({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning className="h-full">
       <head>
         <HeadContent />
       </head>
-      <body>
-        {children}
-        <TanStackDevtools
-          config={{
-            position: 'bottom-right',
-          }}
-          plugins={[
-            {
-              name: 'Tanstack Router',
-              render: <TanStackRouterDevtoolsPanel />,
-            },
-            AiDevtools,
-            TanStackQueryDevtools,
-          ]}
-        />
+      <body className="pb-12">
+        <ThemeProvider defaultTheme="system" storageKey="tanstack-todo-theme">
+          {children}
+          <Footer />
+          <Toaster position="top-right" richColors closeButton />
+          <TanStackDevtools
+            config={{
+              position: 'bottom-right',
+            }}
+            plugins={[
+              {
+                name: 'Tanstack Router',
+                render: <TanStackRouterDevtoolsPanel />,
+              },
+              AiDevtools,
+              TanStackQueryDevtools,
+            ]}
+          />
+        </ThemeProvider>
         <Scripts />
       </body>
     </html>
