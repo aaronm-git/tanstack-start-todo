@@ -38,6 +38,12 @@ function LoginPage() {
           password,
           name,
         })
+        // better-auth signUp creates the user but does not necessarily create a session.
+        // Immediately sign in so the user lands on the dashboard already authenticated.
+        await signIn.email({
+          email,
+          password,
+        })
       } else {
         await signIn.email({
           email,
