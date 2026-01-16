@@ -2,12 +2,19 @@ import { drizzle } from 'drizzle-orm/node-postgres'
 
 import * as schema from './schema.ts'
 
-const databaseUrl = process.env.DATABASE_URL ?? process.env.NETLIFY_DATABASE_URL
+// Prefer Netlify DB (Neon via Netlify) when available to avoid misconfigured DATABASE_URL overrides.
+const databaseUrl = process.env.NETLIFY_DATABASE_URL ?? process.env.DATABASE_URL
 
 if (!databaseUrl) {
   throw new Error(
     'DATABASE_URL (or NETLIFY_DATABASE_URL when using Netlify DB) environment variable is required',
   )
+}
+
+if (process.env.NETLIFY_DATABASE_URL) {
+  console.info('[db] Using NETLIFY_DATABASE_URL')
+} else {
+  console.info('[db] Using DATABASE_URL')
 }
 
 export const db = drizzle(databaseUrl, { schema })
