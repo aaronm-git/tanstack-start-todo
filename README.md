@@ -83,6 +83,15 @@ This repo reads env vars from `.env.local` in dev.
 - **`BETTER_AUTH_URL`** (optional): defaults to `http://localhost:3000`
 - **`VITE_SENTRY_DSN`** (optional): enables Sentry (browser + server)
 
+### Netlify DB (Neon via Netlify)
+
+If you enabled Netlify DB, Netlify automatically injects:
+
+- `NETLIFY_DATABASE_URL`
+- `NETLIFY_DATABASE_URL_UNPOOLED`
+
+This app will use those automatically on Netlify if `DATABASE_URL` is not set.
+
 ---
 
 ## Scripts you’ll actually use

@@ -3,8 +3,16 @@ import { defineConfig } from 'drizzle-kit'
 
 config({ path: ['.env.local', '.env'] })
 
-if (!process.env.DATABASE_URL) {
-  throw new Error('DATABASE_URL environment variable is required')
+const drizzleDatabaseUrl =
+  process.env.DATABASE_URL_UNPOOLED ??
+  process.env.NETLIFY_DATABASE_URL_UNPOOLED ??
+  process.env.DATABASE_URL ??
+  process.env.NETLIFY_DATABASE_URL
+
+if (!drizzleDatabaseUrl) {
+  throw new Error(
+    'DATABASE_URL (or NETLIFY_DATABASE_URL when using Netlify DB) environment variable is required',
+  )
 }
 
 export default defineConfig({
@@ -12,6 +20,6 @@ export default defineConfig({
   schema: './src/db/schema.ts',
   dialect: 'postgresql',
   dbCredentials: {
-    url: process.env.DATABASE_URL,
+    url: drizzleDatabaseUrl,
   },
 })

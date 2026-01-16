@@ -1,6 +1,11 @@
 [build]
-  command = "vite build"
+  command = "pnpm build"
   dir = "dist/client"
+
+[context.production]
+  # Run migrations against the production database during production deploys.
+  # Uses NETLIFY_DATABASE_URL_UNPOOLED/NETLIFY_DATABASE_URL via drizzle.config.ts fallbacks.
+  command = "pnpm db:migrate && pnpm build"
 [dev]
   command = "npm run dev"
   targetPort = 3000
