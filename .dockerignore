@@ -1,0 +1,11 @@
+node_modules
+dist
+.output
+.turbo
+.cache
+.DS_Store
+.env
+.env.*
+*.log
+coverage
+

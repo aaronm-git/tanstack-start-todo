@@ -469,7 +469,7 @@ function DashboardPage() {
   )
 
   return (
-    <div className="flex h-screen">
+    <div className="flex h-screen overflow-hidden">
       {/* Desktop Sidebar */}
       <aside className="hidden lg:flex w-64 border-r bg-muted/10 flex-col h-full overflow-y-auto">
         {sidebarContent}
