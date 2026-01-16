@@ -66,35 +66,35 @@ export function TodoListItem({
           >
             {todo.name}
           </h3>
-          <div className="flex items-center gap-2">
-            {todo.priority !== 'low' && (
-              <Badge
-                variant="secondary"
-                className={cn('text-xs', priorityColors[todo.priority])}
-              >
-                {getPriorityLabel(todo.priority)}
-              </Badge>
+          {/* Meta info */}
+          <div className="flex items-center gap-3 text-xs text-muted-foreground">
+            {subtaskCount > 0 && (
+              <span>
+                {completedSubtasks} of {subtaskCount}
+              </span>
             )}
-            {isOverdue(todo.dueDate) && (
-              <Badge variant="destructive" className="text-xs">
-                Overdue
-              </Badge>
+            {todo.dueDate && (
+              <span className="flex items-center gap-1">
+                <Calendar className="h-3 w-3" />
+                {format(new Date(todo.dueDate), 'MMM d')}
+              </span>
             )}
           </div>
         </div>
-
-        {/* Meta info */}
-        <div className="flex items-center gap-3 text-xs text-muted-foreground">
-          {subtaskCount > 0 && (
-            <span>
-              {completedSubtasks} of {subtaskCount}
-            </span>
+        {/* Right side */}
+        <div className="flex items-center gap-2">
+          {todo.priority !== 'low' && (
+            <Badge
+              variant="secondary"
+              className={cn('text-xs', priorityColors[todo.priority])}
+            >
+              {getPriorityLabel(todo.priority)}
+            </Badge>
           )}
-          {todo.dueDate && (
-            <span className="flex items-center gap-1">
-              <Calendar className="h-3 w-3" />
-              {format(new Date(todo.dueDate), 'MMM d')}
-            </span>
+          {isOverdue(todo.dueDate) && (
+            <Badge variant="destructive" className="text-xs">
+              Overdue
+            </Badge>
           )}
         </div>
       </div>
