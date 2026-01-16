@@ -6,7 +6,7 @@ export function Footer() {
       <div className="container mx-auto px-4 py-3">
         <div className="flex items-center justify-center gap-4 text-xs text-muted-foreground">
           <a
-            href="https://github.com/aaronmolina"
+            href="https://github.com/aaronm-git"
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center gap-1.5 hover:text-foreground transition-colors"
@@ -16,7 +16,7 @@ export function Footer() {
           </a>
           <span className="text-muted-foreground/50">•</span>
           <a
-            href="https://aaronmolina.com"
+            href="https://aaronmolina.me"
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center gap-1.5 hover:text-foreground transition-colors"
