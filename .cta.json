@@ -21,7 +21,6 @@
     "ai",
     "tanstack-query",
     "form",
-    "clerk",
     "sentry",
     "compiler",
     "store"

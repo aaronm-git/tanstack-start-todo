@@ -10,8 +10,6 @@ import AiDevtools from '../lib/ai-devtools'
 
 import TanStackQueryDevtools from '../integrations/tanstack-query/devtools'
 
-import ClerkProvider from '../integrations/clerk/provider'
-
 import appCss from '../styles.css?url'
 
 import type { QueryClient } from '@tanstack/react-query'
@@ -52,22 +50,20 @@ function RootDocument({ children }: { children: React.ReactNode }) {
         <HeadContent />
       </head>
       <body>
-        <ClerkProvider>
-          {children}
-          <TanStackDevtools
-            config={{
-              position: 'bottom-right',
-            }}
-            plugins={[
-              {
-                name: 'Tanstack Router',
-                render: <TanStackRouterDevtoolsPanel />,
-              },
-              AiDevtools,
-              TanStackQueryDevtools,
-            ]}
-          />
-        </ClerkProvider>
+        {children}
+        <TanStackDevtools
+          config={{
+            position: 'bottom-right',
+          }}
+          plugins={[
+            {
+              name: 'Tanstack Router',
+              render: <TanStackRouterDevtoolsPanel />,
+            },
+            AiDevtools,
+            TanStackQueryDevtools,
+          ]}
+        />
         <Scripts />
       </body>
     </html>

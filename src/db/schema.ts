@@ -227,3 +227,9 @@ export const remindersRelations = relations(reminders, ({ one }) => ({
 
 // Update todos relations to include template reminders
 // (This needs to be added to the existing todosRelations)
+
+// ============================================================
+// Better Auth Schema Integration
+// ============================================================
+// Import and re-export Better Auth tables so they're included in migrations
+export * from '../../auth-schema'
