@@ -1,11 +1,9 @@
-# User Documentation (Frontend)
+# User Documentation (App Usage)
 
-Docs for frontend users: what the app can do and how to use it.
+Docs for end users: what the app can do and how to use it.
 
 ## Core
 
-- [Authentication (Clerk)](./authentication.md)
-- [Chat](./chat.md)
-- [Routing](./routing.md)
+- [Authentication](./authentication.md)
 - [AI Todo Creation](./ai-todo.md)
 

@@ -2,7 +2,7 @@
 
 Use these docs when making meaningful architecture changes or adding features.
 
-- [User docs (frontend)](./user/index.md)
+- [User docs (app usage)](./user/index.md)
 - [Dev docs (implementation)](./dev/index.md)
 - [How to write docs](./WRITING.md)
 

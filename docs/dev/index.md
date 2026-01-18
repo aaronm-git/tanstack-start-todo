@@ -6,9 +6,8 @@ Docs for contributors: how features are implemented and where to change things.
 
 - [Architecture overview](./architecture-overview.md)
 - [Routing (file-based)](./routing.md)
-- [Authentication (Clerk)](./authentication.md)
-- [AI integration (Anthropic)](./ai-anthropic.md)
-- [AI Todo Creation (OpenAI)](./ai-todo-openai.md)
+- [Authentication (Better Auth)](./authentication.md)
+- [AI Todo Creation (OpenAI + TanStack AI)](./ai-todo-openai.md)
 - [Zod 4 + TanStack AI Integration](./zod-tanstack-ai-integration.md)
 
 ## Type System

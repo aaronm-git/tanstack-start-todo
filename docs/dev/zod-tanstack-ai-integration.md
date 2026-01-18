@@ -183,14 +183,14 @@ All tests passed without validation errors.
 2. **Automatic Validation**: No manual JSON parsing and validation
 3. **Better Error Messages**: Zod provides detailed validation errors
 4. **Framework Agnostic**: Works with any TanStack AI adapter
-5. **Provider Flexibility**: Easy to swap OpenAI for Anthropic, Gemini, etc.
+5. **Provider Flexibility**: Easy to swap AI providers by changing the adapter
 6. **Maintainability**: Single schema definition, no duplicate JSON Schema
 
 ## Future Improvements
 
 1. **Streaming Support**: Implement streaming responses using TanStack AI's streaming capabilities
 2. **Tool Support**: Add function calling tools for dynamic category creation
-3. **Multi-model Support**: Test with Anthropic Claude and Google Gemini
+3. **Multi-model Support**: Test with additional models/providers supported by TanStack AI
 4. **Prompt Engineering**: Refine system prompts for better categorization and prioritization
 5. **Error Recovery**: Implement fallback strategies for partial AI responses
 

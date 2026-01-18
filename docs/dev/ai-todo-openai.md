@@ -109,66 +109,20 @@ The AI automatically detects when a prompt contains multiple items and creates s
 
 ## Type Safety
 
-Uses Zod 4 schemas for comprehensive type safety:
-- **Database schemas**: Generated from Drizzle tables via `drizzle-zod` (e.g., `todoSchema`, `categorySchema`)
-- **AI schemas**: Hand-crafted with `.nullish()` and detailed descriptions (e.g., `aiGeneratedTodoSchema`)
-- **TanStack AI integration**: `outputSchema` parameter provides automatic validation and type inference
-- **Types derived**: All TypeScript types via `z.infer<typeof schema>`
-- **Single source of truth**: Database schema → Zod → TypeScript types
+This feature relies on Zod schemas for both:
 
-**Zod 4 benefits**:
-- `.nullish()` accepts missing, null, or undefined values (better than `.nullable()` or `.optional()`)
-- Detailed `.describe()` strings guide the AI model's responses
-- TanStack AI automatically converts Zod schemas to JSON Schema for OpenAI
+- **AI output** validation (`aiGeneratedTodoSchema`)
+- **Database/query result** validation (`todoWithRelationsSchema`)
+
+For deeper guidance on Zod 4 + TanStack AI schema design and troubleshooting, see:
+
+- [Zod 4 + TanStack AI Integration](./zod-tanstack-ai-integration.md)
 
 ## Error Handling
 
 - Server function throws errors for database failures
 - Client component shows toast notifications for errors
 - Zod validation ensures response structure matches expected schema
-
-## TanStack AI Integration
-
-### Why TanStack AI?
-
-Using TanStack AI instead of direct OpenAI API calls provides:
-- **Automatic schema conversion**: Zod → JSON Schema for OpenAI
-- **Built-in validation**: Response is validated against `outputSchema` automatically
-- **Type safety**: Full TypeScript inference from Zod schemas
-- **Framework agnostic**: Works with TanStack Start, Next.js, etc.
-- **Provider flexibility**: Easy to swap OpenAI for Anthropic, Gemini, etc.
-
-### Implementation Pattern
-
-```typescript
-import { chat } from '@tanstack/ai'
-import { openaiText } from '@tanstack/ai-openai'
-
-const result = await chat({
-  adapter: openaiText('gpt-4.1-nano'),
-  systemPrompts: [systemPrompt],
-  messages: [{ role: 'user', content: prompt }],
-  outputSchema: aiGeneratedTodoSchema, // Zod 4 schema
-})
-// result is fully typed and validated!
-```
-
-### Troubleshooting
-
-**"Expected string, received undefined" errors:**
-- Use `.nullish()` instead of `.nullable()` or `.optional()`
-- Ensure all fields have detailed `.describe()` strings
-- Check that enum values are plain arrays, not drizzle-zod generated enums
-
-**Schema conversion issues:**
-- Avoid complex Zod modifiers like `.transform()` or `.refine()` in AI schemas
-- Use simple types: `z.string()`, `z.number()`, `z.boolean()`, `z.array()`, `z.object()`
-- Keep nested objects shallow when possible
-
-**Package versions:**
-- `@tanstack/ai`: 0.2.2 or later
-- `zod`: 4.3.5 or later (Zod 4.2+ required for TanStack AI)
-- `@tanstack/ai-openai`: Latest
 
 ## Sentry Instrumentation
 
