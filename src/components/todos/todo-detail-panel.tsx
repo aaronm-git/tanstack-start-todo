@@ -18,7 +18,7 @@ import {
   DropdownMenuTrigger,
 } from '../ui/dropdown-menu'
 import { cn } from '../../lib/utils'
-import { priorityColors, getPriorityLabel, isOverdue } from '../../lib/tasks'
+import { getPriorityColor, getPriorityLabel, isOverdue } from '../../lib/tasks'
 import type { TodoWithRelations } from '../../lib/tasks'
 
 interface TodoDetailPanelProps {
@@ -83,7 +83,7 @@ export function TodoDetailPanel({
           {todo.priority !== 'low' && (
             <Badge
               variant="secondary"
-              className={cn('mb-2', priorityColors[todo.priority])}
+              className={cn('mb-2', getPriorityColor(todo.priority))}
             >
               {getPriorityLabel(todo.priority)}
             </Badge>
@@ -159,7 +159,7 @@ export function TodoDetailPanel({
                               variant="secondary"
                               className={cn(
                                 'text-xs',
-                                priorityColors[subtask.priority],
+                                getPriorityColor(subtask.priority),
                               )}
                             >
                               {getPriorityLabel(subtask.priority)}

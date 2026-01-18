@@ -1,85 +1,67 @@
 import { createServerFn } from '@tanstack/react-start'
 import * as Sentry from '@sentry/tanstackstart-react'
+import { z } from 'zod'
 import { db } from '../../db'
 import { todos, todoCategories } from '../../db/schema'
-import { eq, and, isNull, desc, asc, or, like, sql } from 'drizzle-orm'
-import {
-  createTodoSchema,
-  updateTodoSchema,
-  type CreateTodoInput,
-  type UpdateTodoInput,
-  type TodoWithRelations,
-} from '../tasks'
+import { eq, isNull, desc, asc } from 'drizzle-orm'
+import { createTodoSchema, updateTodoSchema } from '../tasks'
+
+// Shared query config for todos with relations
+const todoWithRelationsConfig = {
+  categories: {
+    with: {
+      category: true,
+    },
+  },
+  subtasks: {
+    with: {
+      categories: {
+        with: {
+          category: true,
+        },
+      },
+    },
+    orderBy: [asc(todos.createdAt)],
+  },
+  parent: true,
+} as const
 
 // Get all todos with their categories and subtasks
 export const getTodos = createServerFn({ method: 'GET' }).handler(async () => {
   return Sentry.startSpan({ name: 'getTodos' }, async () => {
-    const allTodos = await db.query.todos.findMany({
-      with: {
-        categories: {
-          with: {
-            category: true,
-          },
-        },
-        subtasks: {
-          with: {
-            categories: {
-              with: {
-                category: true,
-              },
-            },
-          },
-          orderBy: [asc(todos.createdAt)],
-        },
-        parent: true,
-      },
+    return db.query.todos.findMany({
+      with: todoWithRelationsConfig,
       where: isNull(todos.parentId), // Only get top-level todos
-      orderBy: [desc(todos.priority), asc(todos.dueDate), desc(todos.createdAt)],
+      orderBy: [
+        desc(todos.priority),
+        asc(todos.dueDate),
+        desc(todos.createdAt),
+      ],
     })
-
-    return allTodos as TodoWithRelations[]
   })
 })
 
 // Get a single todo by ID
-export const getTodoById = createServerFn({ method: 'GET' }).handler(
-  async (ctx: { data: string }) => {
+export const getTodoById = createServerFn({ method: 'GET' })
+  .inputValidator(z.uuid())
+  .handler(async (ctx) => {
     return Sentry.startSpan({ name: 'getTodoById' }, async () => {
-      const id = ctx.data
-      const todo = await db.query.todos.findFirst({
-        where: eq(todos.id, id),
-        with: {
-          categories: {
-            with: {
-              category: true,
-            },
-          },
-          subtasks: {
-            with: {
-              categories: {
-                with: {
-                  category: true,
-                },
-              },
-            },
-          },
-          parent: true,
-        },
+      return db.query.todos.findFirst({
+        where: eq(todos.id, ctx.data),
+        with: todoWithRelationsConfig,
       })
-
-      return todo as TodoWithRelations | undefined
     })
-  },
-)
+  })
 
 // Create a new todo
-export const createTodo = createServerFn({ method: 'POST' }).handler(
-  async (ctx: { data: CreateTodoInput }) => {
+export const createTodo = createServerFn({ method: 'POST' })
+  .inputValidator(createTodoSchema)
+  .handler(async (ctx) => {
     return Sentry.startSpan({ name: 'createTodo' }, async () => {
       const data = createTodoSchema.parse(ctx.data)
-      
+
       // Create the todo
-      const [newTodo] = await db
+      const result = await db
         .insert(todos)
         .values({
           name: data.name,
@@ -89,6 +71,8 @@ export const createTodo = createServerFn({ method: 'POST' }).handler(
           parentId: data.parentId || null,
         })
         .returning()
+
+      const newTodo = result[0]
 
       // Assign categories if provided
       if (data.categoryIds && data.categoryIds.length > 0) {
@@ -101,42 +85,27 @@ export const createTodo = createServerFn({ method: 'POST' }).handler(
       }
 
       // Fetch the complete todo with relations
-      const todo = await db.query.todos.findFirst({
+      return db.query.todos.findFirst({
         where: eq(todos.id, newTodo.id),
-        with: {
-          categories: {
-            with: {
-              category: true,
-            },
-          },
-          subtasks: true,
-        },
+        with: todoWithRelationsConfig,
       })
-
-      return todo as TodoWithRelations
     })
-  },
-)
+  })
 
 // Update a todo
-export const updateTodo = createServerFn({ method: 'POST' }).handler(
-  async (ctx: { data: UpdateTodoInput }) => {
+export const updateTodo = createServerFn({ method: 'POST' })
+  .inputValidator(updateTodoSchema)
+  .handler(async (ctx) => {
     return Sentry.startSpan({ name: 'updateTodo' }, async () => {
       const data = updateTodoSchema.parse(ctx.data)
       const { id, categoryIds, ...updateData } = data
 
-      // Update the todo fields
-      const updateFields: any = {}
-      if (updateData.name !== undefined) updateFields.name = updateData.name
-      if (updateData.description !== undefined)
-        updateFields.description = updateData.description
-      if (updateData.priority !== undefined) updateFields.priority = updateData.priority
-      if (updateData.dueDate !== undefined) updateFields.dueDate = updateData.dueDate
-      if (updateData.isComplete !== undefined)
-        updateFields.isComplete = updateData.isComplete
-
-      if (Object.keys(updateFields).length > 0) {
-        await db.update(todos).set(updateFields).where(eq(todos.id, id))
+      // Only update if there are fields to update (spread removes undefined values)
+      const hasFieldsToUpdate = Object.values(updateData).some(
+        (v) => v !== undefined,
+      )
+      if (hasFieldsToUpdate) {
+        await db.update(todos).set(updateData).where(eq(todos.id, id))
       }
 
       // Update categories if provided
@@ -156,37 +125,20 @@ export const updateTodo = createServerFn({ method: 'POST' }).handler(
       }
 
       // Fetch the updated todo with relations
-      const todo = await db.query.todos.findFirst({
+      return db.query.todos.findFirst({
         where: eq(todos.id, id),
-        with: {
-          categories: {
-            with: {
-              category: true,
-            },
-          },
-          subtasks: {
-            with: {
-              categories: {
-                with: {
-                  category: true,
-                },
-              },
-            },
-          },
-        },
+        with: todoWithRelationsConfig,
       })
-
-      return todo as TodoWithRelations
     })
-  },
-)
+  })
 
 // Toggle todo completion status
-export const toggleTodoComplete = createServerFn({ method: 'POST' }).handler(
-  async (ctx: { data: string }) => {
+export const toggleTodoComplete = createServerFn({ method: 'POST' })
+  .inputValidator(z.string().uuid())
+  .handler(async (ctx) => {
     return Sentry.startSpan({ name: 'toggleTodoComplete' }, async () => {
       const id = ctx.data
-      
+
       // Get current status
       const todo = await db.query.todos.findFirst({
         where: eq(todos.id, id),
@@ -205,108 +157,113 @@ export const toggleTodoComplete = createServerFn({ method: 'POST' }).handler(
 
       return updated
     })
-  },
-)
+  })
 
 // Delete a todo (cascades to subtasks and categories via DB constraints)
-export const deleteTodo = createServerFn({ method: 'POST' }).handler(
-  async (ctx: { data: string }) => {
+export const deleteTodo = createServerFn({ method: 'POST' })
+  .inputValidator(z.string().uuid())
+  .handler(async (ctx) => {
     return Sentry.startSpan({ name: 'deleteTodo' }, async () => {
       const id = ctx.data
       await db.delete(todos).where(eq(todos.id, id))
       return { success: true, id }
     })
-  },
-)
+  })
 
 // Create a subtask (todo with parentId set)
-export const createSubtask = createServerFn({ method: 'POST' }).handler(
-  async (ctx: { data: CreateTodoInput & { parentId: string } }) => {
+export const createSubtask = createServerFn({ method: 'POST' })
+  .inputValidator(
+    createTodoSchema.extend({
+      parentId: z.string().uuid(),
+    }),
+  )
+  .handler(async (ctx) => {
     return Sentry.startSpan({ name: 'createSubtask' }, async () => {
       const validated = createTodoSchema.parse(ctx.data)
-      if (!ctx.data.parentId) {
-        throw new Error('Parent ID is required for subtasks')
+      return createTodo({
+        data: { ...validated, parentId: ctx.data.parentId },
+      })
+    })
+  })
+
+// Get statistics for the homepage
+export const getTodoStats = createServerFn({ method: 'GET' }).handler(
+  async () => {
+    return Sentry.startSpan({ name: 'getTodoStats' }, async () => {
+      // Get all todos (including subtasks)
+      const allTodos = await db.query.todos.findMany()
+
+      // Get all categories
+      const allCategories = await db.query.categories.findMany()
+
+      // Calculate basic stats
+      const totalTasks = allTodos.length
+      const completedTasks = allTodos.filter((t) => t.isComplete).length
+      const pendingTasks = totalTasks - completedTasks
+      const completionRate =
+        totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0
+
+      // Tasks by priority
+      const priorityStats = {
+        critical: allTodos.filter((t) => t.priority === 'critical').length,
+        urgent: allTodos.filter((t) => t.priority === 'urgent').length,
+        high: allTodos.filter((t) => t.priority === 'high').length,
+        medium: allTodos.filter((t) => t.priority === 'medium').length,
+        low: allTodos.filter((t) => t.priority === 'low').length,
       }
-      return createTodo({ data: { ...validated, parentId: ctx.data.parentId } })
+
+      // Tasks due soon
+      const now = new Date()
+      const tomorrow = new Date(now)
+      tomorrow.setDate(tomorrow.getDate() + 1)
+      const nextWeek = new Date(now)
+      nextWeek.setDate(nextWeek.getDate() + 7)
+
+      const tasksDueToday = allTodos.filter((t) => {
+        if (!t.dueDate || t.isComplete) return false
+        const dueDate = new Date(t.dueDate)
+        return dueDate.toDateString() === now.toDateString()
+      }).length
+
+      const tasksDueTomorrow = allTodos.filter((t) => {
+        if (!t.dueDate || t.isComplete) return false
+        const dueDate = new Date(t.dueDate)
+        return dueDate.toDateString() === tomorrow.toDateString()
+      }).length
+
+      const tasksDueThisWeek = allTodos.filter((t) => {
+        if (!t.dueDate || t.isComplete) return false
+        const dueDate = new Date(t.dueDate)
+        return dueDate >= now && dueDate <= nextWeek
+      }).length
+
+      // Overdue tasks
+      const overdueTasks = allTodos.filter((t) => {
+        if (!t.dueDate || t.isComplete) return false
+        return new Date(t.dueDate) < now
+      }).length
+
+      // Recently completed (last 7 days)
+      const sevenDaysAgo = new Date(now)
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
+      const recentlyCompleted = allTodos.filter((t) => {
+        if (!t.isComplete || !t.updatedAt) return false
+        return new Date(t.updatedAt) >= sevenDaysAgo
+      }).length
+
+      return {
+        totalTasks,
+        completedTasks,
+        pendingTasks,
+        completionRate,
+        priorityStats,
+        tasksDueToday,
+        tasksDueTomorrow,
+        tasksDueThisWeek,
+        overdueTasks,
+        recentlyCompleted,
+        totalCategories: allCategories.length,
+      }
     })
   },
 )
-
-// Get statistics for the homepage
-export const getTodoStats = createServerFn({ method: 'GET' }).handler(async () => {
-  return Sentry.startSpan({ name: 'getTodoStats' }, async () => {
-    // Get all todos (including subtasks)
-    const allTodos = await db.query.todos.findMany()
-    
-    // Get all categories
-    const allCategories = await db.query.categories.findMany()
-    
-    // Calculate basic stats
-    const totalTasks = allTodos.length
-    const completedTasks = allTodos.filter(t => t.isComplete).length
-    const pendingTasks = totalTasks - completedTasks
-    const completionRate = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0
-    
-    // Tasks by priority
-    const priorityStats = {
-      critical: allTodos.filter(t => t.priority === 'critical').length,
-      urgent: allTodos.filter(t => t.priority === 'urgent').length,
-      high: allTodos.filter(t => t.priority === 'high').length,
-      medium: allTodos.filter(t => t.priority === 'medium').length,
-      low: allTodos.filter(t => t.priority === 'low').length,
-    }
-    
-    // Tasks due soon
-    const now = new Date()
-    const tomorrow = new Date(now)
-    tomorrow.setDate(tomorrow.getDate() + 1)
-    const nextWeek = new Date(now)
-    nextWeek.setDate(nextWeek.getDate() + 7)
-    
-    const tasksDueToday = allTodos.filter(t => {
-      if (!t.dueDate || t.isComplete) return false
-      const dueDate = new Date(t.dueDate)
-      return dueDate.toDateString() === now.toDateString()
-    }).length
-    
-    const tasksDueTomorrow = allTodos.filter(t => {
-      if (!t.dueDate || t.isComplete) return false
-      const dueDate = new Date(t.dueDate)
-      return dueDate.toDateString() === tomorrow.toDateString()
-    }).length
-    
-    const tasksDueThisWeek = allTodos.filter(t => {
-      if (!t.dueDate || t.isComplete) return false
-      const dueDate = new Date(t.dueDate)
-      return dueDate >= now && dueDate <= nextWeek
-    }).length
-    
-    // Overdue tasks
-    const overdueTasks = allTodos.filter(t => {
-      if (!t.dueDate || t.isComplete) return false
-      return new Date(t.dueDate) < now
-    }).length
-    
-    // Recently completed (last 7 days)
-    const sevenDaysAgo = new Date(now)
-    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
-    const recentlyCompleted = allTodos.filter(t => {
-      if (!t.isComplete || !t.updatedAt) return false
-      return new Date(t.updatedAt) >= sevenDaysAgo
-    }).length
-    
-    return {
-      totalTasks,
-      completedTasks,
-      pendingTasks,
-      completionRate,
-      priorityStats,
-      tasksDueToday,
-      tasksDueTomorrow,
-      tasksDueThisWeek,
-      overdueTasks,
-      recentlyCompleted,
-      totalCategories: allCategories.length,
-    }
-  })
-})

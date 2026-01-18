@@ -10,14 +10,22 @@ import {
   SelectValue,
 } from '../ui/select'
 import { ToggleGroup, ToggleGroupItem } from '../ui/toggle-group'
-import { priorityLabels } from '../../lib/tasks'
-import type { Priority } from '../../lib/tasks'
+import { priorityLabels, type Priority } from '../../lib/tasks'
 
 export interface TodoFilters {
   search: string
   priority: Priority | 'all'
   categoryId: string | null
   status: 'all' | 'active' | 'completed'
+}
+
+// Type guards
+function isStatus(value: string): value is TodoFilters['status'] {
+  return value === 'all' || value === 'active' || value === 'completed'
+}
+
+function isPriorityOrAll(value: string): value is Priority | 'all' {
+  return value === 'all' || value in priorityLabels
 }
 
 interface TodoFiltersProps {
@@ -79,9 +87,11 @@ export function TodoFilters({
         <ToggleGroup
           type="single"
           value={filters.status}
-          onValueChange={(value) =>
-            value && onFiltersChange({ ...filters, status: value as any })
-          }
+          onValueChange={(value) => {
+            if (value && isStatus(value)) {
+              onFiltersChange({ ...filters, status: value })
+            }
+          }}
           className="border rounded-lg p-1"
         >
           <ToggleGroupItem value="all" aria-label="All todos" size="sm">
@@ -111,9 +121,11 @@ export function TodoFilters({
         {/* Priority Filter */}
         <Select
           value={filters.priority}
-          onValueChange={(value) =>
-            onFiltersChange({ ...filters, priority: value as Priority | 'all' })
-          }
+          onValueChange={(value) => {
+            if (isPriorityOrAll(value)) {
+              onFiltersChange({ ...filters, priority: value })
+            }
+          }}
         >
           <SelectTrigger className="w-[120px] sm:w-[140px]">
             <SelectValue placeholder="Priority" />

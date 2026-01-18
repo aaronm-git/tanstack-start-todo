@@ -8,20 +8,27 @@ import netlify from '@netlify/vite-plugin-tanstack-start'
 
 const config = defineConfig({
   plugins: [
+    tanstackStart(),
     devtools(),
     netlify(),
-    // this is the plugin that enables path aliases
     viteTsConfigPaths({
       projects: ['./tsconfig.json'],
     }),
     tailwindcss(),
-    tanstackStart(),
     viteReact({
       babel: {
         plugins: ['babel-plugin-react-compiler'],
       },
     }),
   ],
+  optimizeDeps: {
+    exclude: [
+      '@tanstack/react-start',
+      '@tanstack/start-server-core',
+      '@tanstack/react-router',
+      '@tanstack/react-router-devtools',
+    ],
+  },
 })
 
 export default config

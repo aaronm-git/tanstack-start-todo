@@ -24,7 +24,7 @@ import {
   AccordionTrigger,
 } from '../ui/accordion'
 import { cn } from '../../lib/utils'
-import { priorityColors, getPriorityLabel } from '../../lib/tasks'
+import { getPriorityColor, getPriorityLabel } from '../../lib/tasks'
 import type { TodoWithRelations } from '../../lib/tasks'
 
 interface TodoCardProps {
@@ -77,7 +77,7 @@ export function TodoCard({
               >
                 {todo.name}
               </h3>
-              <Badge variant="secondary" className={cn(priorityColors[todo.priority])}>
+              <Badge variant="secondary" className={cn(getPriorityColor(todo.priority))}>
                 {getPriorityLabel(todo.priority)}
               </Badge>
             </div>

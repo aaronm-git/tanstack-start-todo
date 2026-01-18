@@ -32,8 +32,16 @@ import {
 } from '../ui/command'
 import { Badge } from '../ui/badge'
 import { cn } from '../../lib/utils'
-import { priorityLabels } from '../../lib/tasks'
-import type { Priority, TodoWithRelations, CategoryWithCount } from '../../lib/tasks'
+import { priorityLabels, type Priority } from '../../lib/tasks'
+import type { TodoWithRelations, CategoryWithCount } from '../../lib/tasks'
+
+// Default priority value
+const DEFAULT_PRIORITY: Priority = 'low'
+
+// Type guard for Priority values
+function isPriority(value: string): value is Priority {
+  return value in priorityLabels
+}
 
 interface TodoDialogProps {
   open: boolean
@@ -68,7 +76,7 @@ export function TodoDialog({
   const [formData, setFormData] = useState<TodoFormData>({
     name: '',
     description: '',
-    priority: 'low' as Priority,
+    priority: DEFAULT_PRIORITY,
     dueDate: null,
     categoryIds: [],
     parentId: parentId || null,
@@ -92,7 +100,7 @@ export function TodoDialog({
         setFormData({
           name: '',
           description: '',
-          priority: 'low' as Priority,
+          priority: DEFAULT_PRIORITY,
           dueDate: null,
           categoryIds: [],
           parentId: parentId || null,
@@ -180,9 +188,11 @@ export function TodoDialog({
             <Label htmlFor="priority">Priority</Label>
             <Select
               value={formData.priority}
-              onValueChange={(value) =>
-                setFormData((prev) => ({ ...prev, priority: value as Priority }))
-              }
+              onValueChange={(value) => {
+                if (isPriority(value)) {
+                  setFormData((prev) => ({ ...prev, priority: value }))
+                }
+              }}
             >
               <SelectTrigger id="priority">
                 <SelectValue placeholder="Select priority" />

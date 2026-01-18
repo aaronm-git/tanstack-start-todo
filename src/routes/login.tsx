@@ -1,4 +1,4 @@
-import { createFileRoute, Link, useNavigate } from '@tanstack/react-router'
+import { Link, createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useState } from 'react'
 import { signIn, signUp } from '../lib/auth-client'
 import { Button } from '../components/ui/button'
@@ -12,6 +12,7 @@ import {
   CardHeader,
   CardTitle,
 } from '../components/ui/card'
+import { InputPassword } from '@/components/input-password'
 
 export const Route = createFileRoute('/login')({
   component: LoginPage,
@@ -51,8 +52,8 @@ function LoginPage() {
         })
       }
       navigate({ to: '/dashboard' })
-    } catch (err: any) {
-      setError(err?.message || 'An error occurred')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'An error occurred')
     } finally {
       setLoading(false)
     }
@@ -107,14 +108,23 @@ function LoginPage() {
 
             <div className="space-y-2">
               <Label htmlFor="password">Password</Label>
-              <Input
+              <InputPassword
                 id="password"
-                type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
                 placeholder="••••••••"
               />
+              {!isSignUp && (
+                <div className="pt-1">
+                  <Link
+                    to="/forgot-password"
+                    className="text-sm underline underline-offset-4 hover:text-primary"
+                  >
+                    Forgot password?
+                  </Link>
+                </div>
+              )}
             </div>
 
             <Button type="submit" disabled={loading} className="w-full">

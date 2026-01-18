@@ -33,6 +33,7 @@ import {
 } from '../components/ui/dropdown-menu'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { getTodoStats } from '../lib/server/todos'
+import { Hero203 } from '../components/hero203'
 
 export const Route = createFileRoute('/')({ component: App })
 
@@ -48,11 +49,14 @@ function App() {
     <div className="flex flex-col min-h-screen">
       {/* Header with Theme Toggle */}
       <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-backdrop-filter:bg-background/60">
-        <div className="container flex h-14 items-center justify-between px-4 md:px-6">
-          <div className="flex items-center gap-2">
-            <ListTodo className="h-6 w-6" />
-            <span className="font-semibold">Todo App</span>
-          </div>
+        <div className="container flex h-14 items-center justify-between px-4 md:px-6 mx-auto">
+          <Link to="/" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
+            <ListTodo className="h-6 w-6 text-primary" />
+            <div className="flex flex-col">
+              <span className="font-bold text-lg leading-none">Toodyloo</span>
+              <span className="text-xs text-muted-foreground leading-none hidden sm:block">AI Driven To-Do App</span>
+            </div>
+          </Link>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="icon">
@@ -82,75 +86,98 @@ function App() {
         </div>
       </header>
 
+      {/* Video Hero Section */}
+      <Hero203 />
+
       {/* Hero Section */}
-      <section className="w-full py-12 md:py-24 lg:py-32 xl:py-40 bg-linear-to-b from-background to-muted">
-        <div className="container px-4 md:px-6">
-          <div className="flex flex-col items-center space-y-6 text-center">
-            <div className="space-y-4">
-              <Badge variant="secondary" className="mb-2">
-                <Flame className="mr-1 h-3 w-3" />
-                Your Productivity Hub
+      <section className="w-full py-12 md:py-24 lg:py-32 xl:py-40 bg-linear-to-b from-background via-background to-muted/50">
+        <div className="container px-4 md:px-6 mx-auto">
+          <div className="flex flex-col items-center space-y-8 text-center">
+            <div className="space-y-6">
+              <Badge variant="secondary" className="mb-4 px-4 py-1.5 text-sm font-medium">
+                <Flame className="mr-1.5 h-3.5 w-3.5" />
+                The Smart Way to Stay Organized
               </Badge>
-              <h1 className="text-3xl font-bold tracking-tighter sm:text-4xl md:text-5xl lg:text-6xl/none">
-                Master Your Tasks,
+              <h1 className="text-4xl font-bold tracking-tight sm:text-5xl md:text-6xl lg:text-7xl/none">
+                Stop Forgetting.
                 <br />
-                <span className="text-primary">Achieve Your Goals</span>
+                <span className="text-primary">Start Accomplishing.</span>
               </h1>
-              <p className="mx-auto max-w-[700px] text-muted-foreground md:text-xl">
-                A powerful todo management system designed to help you stay organized, 
-                track progress, and accomplish more every day.
+              <p className="mx-auto max-w-[800px] text-lg text-muted-foreground md:text-xl lg:text-2xl leading-relaxed">
+                <strong className="text-foreground">Toodyloo</strong> is the smart to-do app that helps you focus on what matters. 
+                Organize tasks, track progress, and achieve your goals—all in one beautiful, intuitive interface.
               </p>
             </div>
 
             {/* CTA Buttons */}
-            <div className="flex flex-col items-center gap-4">
+            <div className="flex flex-col sm:flex-row items-center gap-4 pt-4">
               {session?.user ? (
                 <>
-                  <Button asChild size="lg" className="gap-2">
+                  <Button asChild size="lg" className="gap-2 text-base px-8">
                     <Link to="/dashboard">
-                      Go to Dashboard
+                      Open Dashboard
                       <ArrowRight className="h-4 w-4" />
                     </Link>
                   </Button>
-                  <p className="text-sm text-muted-foreground">
-                    Welcome back, {session.user.name || session.user.email}!
+                  <p className="text-sm text-muted-foreground sm:ml-4">
+                    Welcome back, {session.user.name || session.user.email}! 👋
                   </p>
                 </>
               ) : (
                 <>
-                  <Button asChild size="lg" className="gap-2">
+                  <Button asChild size="lg" className="gap-2 text-base px-8 h-12">
                     <Link to="/login">
-                      Get Started Free
+                      Start Free Today
                       <ArrowRight className="h-4 w-4" />
                     </Link>
                   </Button>
-                  <p className="text-sm text-muted-foreground">
-                    Sign in to start organizing your tasks
+                  <p className="text-sm text-muted-foreground sm:ml-4">
+                    No credit card required • Setup in 30 seconds
                   </p>
                 </>
               )}
             </div>
+
+            {/* Trust Indicators */}
+            {!session?.user && (
+              <div className="flex flex-wrap items-center justify-center gap-6 pt-8 text-sm text-muted-foreground">
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="h-4 w-4 text-green-500" />
+                  <span>Free Forever</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="h-4 w-4 text-green-500" />
+                  <span>No Credit Card</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="h-4 w-4 text-green-500" />
+                  <span>Privacy First</span>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </section>
 
       {/* Stats Section */}
-      <section className="w-full py-12 md:py-16 border-b">
-        <div className="container px-4 md:px-6">
-          <div className="text-center mb-10">
-            <h2 className="text-2xl font-bold tracking-tight sm:text-3xl mb-2">
-              App Activity Overview
+      <section className="w-full py-16 md:py-20 border-b bg-muted/30">
+        <div className="container px-4 mx-auto md:px-6">
+          <div className="text-center mb-12">
+            <h2 className="text-3xl font-bold tracking-tight sm:text-4xl mb-3">
+              Your Productivity, Visualized
             </h2>
-            <p className="text-muted-foreground">
-              Real-time statistics from your productivity journey
+            <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
+              See your progress at a glance. Every task completed is a step closer to your goals.
             </p>
           </div>
-          
+
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {/* Total Tasks */}
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Total Tasks</CardTitle>
+                <CardTitle className="text-sm font-medium">
+                  Total Tasks
+                </CardTitle>
                 <ListTodo className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
@@ -182,7 +209,9 @@ function App() {
                 <TrendingUp className="h-4 w-4 text-blue-500" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{stats.recentlyCompleted}</div>
+                <div className="text-2xl font-bold">
+                  {stats.recentlyCompleted}
+                </div>
                 <p className="text-xs text-muted-foreground mt-1">
                   Completed last 7 days
                 </p>
@@ -192,11 +221,15 @@ function App() {
             {/* Categories */}
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Categories</CardTitle>
+                <CardTitle className="text-sm font-medium">
+                  Categories
+                </CardTitle>
                 <FolderKanban className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{stats.totalCategories}</div>
+                <div className="text-2xl font-bold">
+                  {stats.totalCategories}
+                </div>
                 <p className="text-xs text-muted-foreground mt-1">
                   Active categories
                 </p>
@@ -208,7 +241,7 @@ function App() {
 
       {/* Due Tasks & Priority Stats */}
       <section className="w-full py-12 md:py-16 bg-muted">
-        <div className="container px-4 md:px-6">
+        <div className="container px-4 md:px-6 mx-auto">
           <div className="grid gap-6 lg:grid-cols-2">
             {/* Due Soon Card */}
             <Card>
@@ -227,7 +260,11 @@ function App() {
                     <AlertCircle className="h-4 w-4 text-red-500" />
                     <span className="text-sm font-medium">Overdue</span>
                   </div>
-                  <Badge variant={stats.overdueTasks > 0 ? 'destructive' : 'secondary'}>
+                  <Badge
+                    variant={
+                      stats.overdueTasks > 0 ? 'destructive' : 'secondary'
+                    }
+                  >
                     {stats.overdueTasks}
                   </Badge>
                 </div>
@@ -236,7 +273,9 @@ function App() {
                     <Clock className="h-4 w-4 text-orange-500" />
                     <span className="text-sm font-medium">Due Today</span>
                   </div>
-                  <Badge variant={stats.tasksDueToday > 0 ? 'default' : 'secondary'}>
+                  <Badge
+                    variant={stats.tasksDueToday > 0 ? 'default' : 'secondary'}
+                  >
                     {stats.tasksDueToday}
                   </Badge>
                 </div>
@@ -274,7 +313,9 @@ function App() {
                     <div className="h-3 w-3 rounded-full bg-purple-500" />
                     <span className="text-sm font-medium">Critical</span>
                   </div>
-                  <Badge variant="outline">{stats.priorityStats.critical}</Badge>
+                  <Badge variant="outline">
+                    {stats.priorityStats.critical}
+                  </Badge>
                 </div>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
@@ -311,128 +352,148 @@ function App() {
       </section>
 
       {/* Features Section */}
-      <section className="w-full py-12 md:py-16">
-        <div className="container px-4 md:px-6">
-          <div className="text-center mb-10">
-            <h2 className="text-2xl font-bold tracking-tight sm:text-3xl mb-2">
-              Everything You Need
+      <section className="w-full py-16 md:py-20">
+        <div className="container px-4 md:px-6 mx-auto">
+          <div className="text-center mb-12">
+            <h2 className="text-3xl font-bold tracking-tight sm:text-4xl mb-3">
+              Everything You Need to Succeed
             </h2>
-            <p className="text-muted-foreground">
-              Powerful features to boost your productivity
+            <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
+              Powerful features designed to help you accomplish more, stress less, and stay organized effortlessly.
             </p>
           </div>
-          
+
           <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            <Card className="border-2">
+            <Card className="border-2 hover:border-primary/50 transition-colors">
               <CardHeader>
-                <div className="mb-2 text-primary">
-                  <Target className="h-8 w-8" />
+                <div className="mb-3 text-primary">
+                  <Target className="h-10 w-10" />
                 </div>
-                <CardTitle>Priority Management</CardTitle>
+                <CardTitle className="text-xl mb-2">Focus on What Matters</CardTitle>
               </CardHeader>
               <CardContent>
-                <CardDescription>
-                  Set priorities from low to critical. Focus on what matters most with 
-                  clear visual indicators and smart sorting.
+                <CardDescription className="text-base">
+                  Smart priority management helps you tackle critical tasks first. 
+                  Never waste time on low-value work again.
                 </CardDescription>
               </CardContent>
             </Card>
 
-            <Card className="border-2">
+            <Card className="border-2 hover:border-primary/50 transition-colors">
               <CardHeader>
-                <div className="mb-2 text-primary">
-                  <FolderKanban className="h-8 w-8" />
+                <div className="mb-3 text-primary">
+                  <FolderKanban className="h-10 w-10" />
                 </div>
-                <CardTitle>Categories & Tags</CardTitle>
+                <CardTitle className="text-xl mb-2">Organize Your Life</CardTitle>
               </CardHeader>
               <CardContent>
-                <CardDescription>
-                  Organize tasks with custom categories. Color-coded labels make it 
-                  easy to find and filter related tasks.
+                <CardDescription className="text-base">
+                  Custom categories and color-coded tags let you organize tasks 
+                  your way. Find anything instantly, no matter how complex your workflow.
                 </CardDescription>
               </CardContent>
             </Card>
 
-            <Card className="border-2">
+            <Card className="border-2 hover:border-primary/50 transition-colors">
               <CardHeader>
-                <div className="mb-2 text-primary">
-                  <ListTodo className="h-8 w-8" />
+                <div className="mb-3 text-primary">
+                  <ListTodo className="h-10 w-10" />
                 </div>
-                <CardTitle>Subtasks</CardTitle>
+                <CardTitle className="text-xl mb-2">Break Down Big Goals</CardTitle>
               </CardHeader>
               <CardContent>
-                <CardDescription>
-                  Break down complex projects into manageable steps. Create nested 
-                  hierarchies for better organization.
+                <CardDescription className="text-base">
+                  Turn overwhelming projects into manageable steps. Create subtasks 
+                  and nested hierarchies to track progress on complex initiatives.
                 </CardDescription>
               </CardContent>
             </Card>
 
-            <Card className="border-2">
+            <Card className="border-2 hover:border-primary/50 transition-colors">
               <CardHeader>
-                <div className="mb-2 text-primary">
-                  <Calendar className="h-8 w-8" />
+                <div className="mb-3 text-primary">
+                  <Calendar className="h-10 w-10" />
                 </div>
-                <CardTitle>Due Dates</CardTitle>
+                <CardTitle className="text-xl mb-2">Never Miss a Deadline</CardTitle>
               </CardHeader>
               <CardContent>
-                <CardDescription>
-                  Never miss a deadline. Set due dates, get visual reminders, and see 
-                  upcoming tasks at a glance.
+                <CardDescription className="text-base">
+                  Visual reminders and smart due date tracking ensure you're always 
+                  on top of what's coming up. Stay ahead, never behind.
                 </CardDescription>
               </CardContent>
             </Card>
 
-            <Card className="border-2">
+            <Card className="border-2 hover:border-primary/50 transition-colors">
               <CardHeader>
-                <div className="mb-2 text-primary">
-                  <TrendingUp className="h-8 w-8" />
+                <div className="mb-3 text-primary">
+                  <TrendingUp className="h-10 w-10" />
                 </div>
-                <CardTitle>Progress Tracking</CardTitle>
+                <CardTitle className="text-xl mb-2">See Your Progress</CardTitle>
               </CardHeader>
               <CardContent>
-                <CardDescription>
-                  Monitor your productivity with completion rates, trends, and 
-                  real-time statistics.
+                <CardDescription className="text-base">
+                  Real-time statistics and completion rates show you exactly how 
+                  productive you've been. Celebrate wins and stay motivated.
                 </CardDescription>
               </CardContent>
             </Card>
 
-            <Card className="border-2">
-                <CardHeader>
-                <div className="mb-2 text-primary">
-                  <CheckCircle2 className="h-8 w-8" />
+            <Card className="border-2 hover:border-primary/50 transition-colors">
+              <CardHeader>
+                <div className="mb-3 text-primary">
+                  <CheckCircle2 className="h-10 w-10" />
                 </div>
-                <CardTitle>Instant Updates</CardTitle>
-                </CardHeader>
-                <CardContent>
-                <CardDescription>
-                  Optimistic UI gives instant feedback. Changes sync seamlessly in 
-                  the background.
+                <CardTitle className="text-xl mb-2">Lightning Fast</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <CardDescription className="text-base">
+                  Instant updates and seamless syncing mean you spend less time 
+                  waiting and more time doing. Optimistic UI keeps you moving forward.
                 </CardDescription>
-                </CardContent>
-              </Card>
+              </CardContent>
+            </Card>
           </div>
         </div>
       </section>
 
       {/* CTA Section */}
       {!session?.user && (
-        <section className="w-full py-12 md:py-16 bg-primary text-primary-foreground">
-          <div className="container px-4 md:px-6">
-            <div className="flex flex-col items-center space-y-4 text-center">
-              <h2 className="text-2xl font-bold tracking-tight sm:text-3xl md:text-4xl">
-                Ready to Get Organized?
+        <section className="w-full py-16 md:py-20 bg-linear-to-br from-primary via-primary to-primary/90 text-primary-foreground">
+          <div className="container px-4 md:px-6 mx-auto">
+            <div className="flex flex-col items-center space-y-6 text-center max-w-3xl mx-auto">
+              <h2 className="text-3xl font-bold tracking-tight sm:text-4xl md:text-5xl">
+                Ready to Transform Your Productivity?
               </h2>
-              <p className="mx-auto max-w-[600px] text-primary-foreground/90 md:text-lg">
-                Join now and start managing your tasks more effectively. It's free to get started!
+              <p className="mx-auto text-lg md:text-xl text-primary-foreground/90 leading-relaxed">
+                Join thousands who've already discovered the smart way to stay organized. 
+                Start your free account today—no credit card required, no commitment, just results.
               </p>
-              <Button asChild size="lg" variant="secondary" className="gap-2">
-                <Link to="/login">
-                  Sign Up Now
-                  <ArrowRight className="h-4 w-4" />
-                </Link>
-              </Button>
+              <div className="flex flex-col sm:flex-row items-center gap-4 pt-2">
+                <Button asChild size="lg" variant="secondary" className="gap-2 text-base px-8 h-12 bg-background text-foreground hover:bg-background/90">
+                  <Link to="/login">
+                    Start Free Today
+                    <ArrowRight className="h-4 w-4" />
+                  </Link>
+                </Button>
+                <p className="text-sm text-primary-foreground/80">
+                  Setup takes less than 30 seconds
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center justify-center gap-8 pt-6 text-sm text-primary-foreground/80">
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="h-4 w-4" />
+                  <span>Unlimited Tasks</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="h-4 w-4" />
+                  <span>All Features Included</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="h-4 w-4" />
+                  <span>Cancel Anytime</span>
+                </div>
+              </div>
             </div>
           </div>
         </section>

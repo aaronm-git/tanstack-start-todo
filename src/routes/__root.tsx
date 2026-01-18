@@ -32,7 +32,7 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
         content: 'width=device-width, initial-scale=1',
       },
       {
-        title: 'TanStack Start Starter',
+        title: 'Toodyloo - Smart To-Do App',
       },
     ],
     links: [
@@ -53,7 +53,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
         <HeadContent />
       </head>
       <body className="pb-12">
-        <ThemeProvider defaultTheme="system" storageKey="tanstack-todo-theme">
+        <ThemeProvider defaultTheme="system" storageKey="toodyloo-theme">
           {children}
           <Footer />
           <Toaster position="top-right" richColors closeButton />

@@ -57,7 +57,14 @@ import { TodoFilters, type TodoFilters as TodoFiltersType } from '../components/
 import { CategorySidebar } from '../components/categories/category-sidebar'
 import { CategoryDialog, type CategoryFormData } from '../components/categories/category-dialog'
 
-import type { TodoWithRelations, CategoryWithCount } from '../lib/tasks'
+import type {
+  TodoWithRelations,
+  CategoryWithCount,
+  CreateTodoInput,
+  UpdateTodoInput,
+  CreateCategoryInput,
+  UpdateCategoryInput,
+} from '../lib/tasks'
 
 export const Route = createFileRoute('/dashboard')({
   component: DashboardPage,
@@ -121,29 +128,31 @@ function DashboardPage() {
 
   // Mutations with optimistic updates
   const createTodoMutation = useMutation({
-    mutationFn: (data: TodoFormData) => createTodo({ data } as unknown as Parameters<typeof createTodo>[0]),
+    mutationFn: (data: CreateTodoInput) => createTodo({ data }),
     onMutate: async (newTodo) => {
       await queryClient.cancelQueries({ queryKey: ['todos'] })
       const previousTodos = queryClient.getQueryData(['todos'])
       
-      // Optimistically update
-      const optimisticTodo: TodoWithRelations = {
+      // Optimistically update - create partial object for optimistic UI
+      const optimisticTodo = {
         id: `temp-${Date.now()}`,
         name: newTodo.name,
-        description: newTodo.description,
-        priority: newTodo.priority,
+        description: newTodo.description ?? '',
+        priority: newTodo.priority ?? 'low',
         isComplete: false,
-        dueDate: newTodo.dueDate,
-        parentId: newTodo.parentId || null,
+        dueDate: newTodo.dueDate ?? null,
+        parentId: newTodo.parentId ?? null,
         createdAt: new Date(),
         updatedAt: new Date(),
-        categories: newTodo.categoryIds.map((id) => ({
+        categories: (newTodo.categoryIds ?? []).map((id) => ({
+          todoId: `temp-${Date.now()}`,
+          categoryId: id,
           category: categories.find((c) => c.id === id)!,
         })),
         subtasks: [],
       }
       
-      queryClient.setQueryData(['todos'], (old: TodoWithRelations[] = []) => [
+      queryClient.setQueryData(['todos'], (old: typeof todos = []) => [
         ...old,
         optimisticTodo,
       ])
@@ -165,13 +174,12 @@ function DashboardPage() {
   })
 
   const updateTodoMutation = useMutation({
-    mutationFn: ({ id, ...data }: { id: string } & Partial<TodoFormData>) => 
-      updateTodo({ data: { id, ...data } } as unknown as Parameters<typeof updateTodo>[0]),
+    mutationFn: (data: UpdateTodoInput) => updateTodo({ data }),
     onMutate: async (updatedTodo) => {
       await queryClient.cancelQueries({ queryKey: ['todos'] })
       const previousTodos = queryClient.getQueryData(['todos'])
       
-      queryClient.setQueryData(['todos'], (old: TodoWithRelations[] = []) =>
+      queryClient.setQueryData(['todos'], (old: typeof todos = []) =>
         old.map((todo) =>
           todo.id === updatedTodo.id ? { ...todo, ...updatedTodo } : todo
         )
@@ -188,7 +196,7 @@ function DashboardPage() {
       queryClient.invalidateQueries({ queryKey: ['categories'] })
       // Update selected todo if it was the one being edited
       if (selectedTodo && updatedTodo && selectedTodo.id === updatedTodo.id) {
-        setSelectedTodo(updatedTodo as TodoWithRelations)
+        setSelectedTodo(updatedTodo)
       }
       toast.success('Todo updated successfully')
       setTodoDialogOpen(false)
@@ -197,12 +205,12 @@ function DashboardPage() {
   })
 
   const toggleCompleteMutation = useMutation({
-    mutationFn: (id: string) => toggleTodoComplete({ data: id } as unknown as Parameters<typeof toggleTodoComplete>[0]),
+    mutationFn: (id: string) => toggleTodoComplete({ data: id }),
     onMutate: async (id) => {
       await queryClient.cancelQueries({ queryKey: ['todos'] })
       const previousTodos = queryClient.getQueryData(['todos'])
       
-      queryClient.setQueryData(['todos'], (old: TodoWithRelations[] = []) =>
+      queryClient.setQueryData(['todos'], (old: typeof todos = []) =>
         old.map((todo) =>
           todo.id === id ? { ...todo, isComplete: !todo.isComplete } : todo
         )
@@ -224,12 +232,12 @@ function DashboardPage() {
   })
 
   const deleteTodoMutation = useMutation({
-    mutationFn: (id: string) => deleteTodo({ data: id } as unknown as Parameters<typeof deleteTodo>[0]),
+    mutationFn: (id: string) => deleteTodo({ data: id }),
     onMutate: async (id) => {
       await queryClient.cancelQueries({ queryKey: ['todos'] })
       const previousTodos = queryClient.getQueryData(['todos'])
       
-      queryClient.setQueryData(['todos'], (old: TodoWithRelations[] = []) =>
+      queryClient.setQueryData(['todos'], (old: typeof todos = []) =>
         old.filter((todo) => todo.id !== id)
       )
       
@@ -251,7 +259,7 @@ function DashboardPage() {
   })
 
   const createCategoryMutation = useMutation({
-    mutationFn: (data: CategoryFormData) => createCategory({ data } as unknown as Parameters<typeof createCategory>[0]),
+    mutationFn: (data: CreateCategoryInput) => createCategory({ data }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['categories'] })
       toast.success('Category created successfully')
@@ -264,8 +272,7 @@ function DashboardPage() {
   })
 
   const updateCategoryMutation = useMutation({
-    mutationFn: ({ id, ...data }: { id: string } & Partial<CategoryFormData>) =>
-      updateCategory({ data: { id, ...data } } as unknown as Parameters<typeof updateCategory>[0]),
+    mutationFn: (data: UpdateCategoryInput) => updateCategory({ data }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['categories'] })
       toast.success('Category updated successfully')
@@ -278,7 +285,7 @@ function DashboardPage() {
   })
 
   const deleteCategoryMutation = useMutation({
-    mutationFn: (id: string) => deleteCategory({ data: id } as unknown as Parameters<typeof deleteCategory>[0]),
+    mutationFn: (id: string) => deleteCategory({ data: id }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['categories'] })
       queryClient.invalidateQueries({ queryKey: ['todos'] })

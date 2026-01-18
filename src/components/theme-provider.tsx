@@ -2,6 +2,11 @@ import { createContext, useContext, useEffect, useState } from 'react'
 
 type Theme = 'dark' | 'light' | 'system'
 
+// Type guard for Theme values
+function isTheme(value: string | null): value is Theme {
+  return value === 'dark' || value === 'light' || value === 'system'
+}
+
 type ThemeProviderProps = {
   children: React.ReactNode
   defaultTheme?: Theme
@@ -29,7 +34,8 @@ export function ThemeProvider({
   const [theme, setTheme] = useState<Theme>(() => {
     // Only access localStorage on the client side
     if (typeof window !== 'undefined') {
-      return (localStorage.getItem(storageKey) as Theme) || defaultTheme
+      const stored = localStorage.getItem(storageKey)
+      return isTheme(stored) ? stored : defaultTheme
     }
     return defaultTheme
   })

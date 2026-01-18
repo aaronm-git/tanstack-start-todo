@@ -11,7 +11,7 @@ import {
   DropdownMenuSeparator,
 } from '../ui/dropdown-menu'
 import { cn } from '../../lib/utils'
-import { priorityColors, getPriorityLabel, isOverdue } from '../../lib/tasks'
+import { getPriorityColor, getPriorityLabel, isOverdue } from '../../lib/tasks'
 import type { TodoWithRelations } from '../../lib/tasks'
 
 interface TodoListItemProps {
@@ -86,7 +86,7 @@ export function TodoListItem({
           {todo.priority !== 'low' && (
             <Badge
               variant="secondary"
-              className={cn('text-xs', priorityColors[todo.priority])}
+              className={cn('text-xs', getPriorityColor(todo.priority))}
             >
               {getPriorityLabel(todo.priority)}
             </Badge>

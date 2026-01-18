@@ -1,16 +1,36 @@
 import { z } from 'zod'
-import type { Priority } from '../db/schema'
+import type { InferSelectModel } from 'drizzle-orm'
+import type { todos, categories, todoCategories, Priority } from '../db/schema'
+
+export type { Priority }
+
+// Inferred base types from Drizzle schema
+type Todo = InferSelectModel<typeof todos>
+type Category = InferSelectModel<typeof categories>
+type TodoCategory = InferSelectModel<typeof todoCategories>
+
+// Todo with relations - inferred structure matching Drizzle query results
+export type TodoWithRelations = Todo & {
+  categories: Array<TodoCategory & { category: Category }>
+  subtasks?: Array<Todo & { categories: Array<TodoCategory & { category: Category }> }>
+  parent?: Todo | null
+}
+
+// Category with todo count for UI
+export type CategoryWithCount = Category & {
+  todoCount: number
+}
 
 // Priority labels and utilities
-export const priorityLabels: Record<Priority, string> = {
+export const priorityLabels = {
   low: 'Low',
   medium: 'Medium',
   high: 'High',
   urgent: 'Urgent',
   critical: 'Critical',
-}
+} as const
 
-export function getPriorityLabel(priority: Priority): string {
+export function getPriorityLabel(priority: Todo['priority']): string {
   return priorityLabels[priority] ?? 'Unknown'
 }
 
@@ -27,6 +47,11 @@ export const priorityColors: Record<Priority, string> = {
   high: 'bg-orange-100 text-orange-800',
   urgent: 'bg-red-100 text-red-800',
   critical: 'bg-red-600 text-white',
+}
+
+// Helper to get priority color with type safety
+export function getPriorityColor(priority: Priority): string {
+  return priorityColors[priority]
 }
 
 // Zod schemas for validation
@@ -75,35 +100,3 @@ export type CreateTodoInput = z.infer<typeof createTodoSchema>
 export type UpdateTodoInput = z.infer<typeof updateTodoSchema>
 export type CreateCategoryInput = z.infer<typeof createCategorySchema>
 export type UpdateCategoryInput = z.infer<typeof updateCategorySchema>
-
-// Todo with relations type for frontend
-export interface TodoWithRelations {
-  id: string
-  name: string
-  description: string
-  priority: Priority
-  isComplete: boolean
-  dueDate: Date | null
-  parentId: string | null
-  createdAt: Date
-  updatedAt: Date
-  categories: Array<{
-    category: {
-      id: string
-      name: string
-      color: string | null
-    }
-  }>
-  subtasks?: TodoWithRelations[]
-  parent?: TodoWithRelations | null
-}
-
-// Category with todo count
-export interface CategoryWithCount {
-  id: string
-  name: string
-  color: string | null
-  createdAt: Date
-  updatedAt: Date
-  todoCount: number
-}
