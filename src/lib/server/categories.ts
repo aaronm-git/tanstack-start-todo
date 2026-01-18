@@ -4,10 +4,16 @@ import { z } from 'zod'
 import { db } from '../../db'
 import { categories, todoCategories } from '../../db/schema'
 import { eq, sql } from 'drizzle-orm'
-import { createCategorySchema, updateCategorySchema } from '../tasks'
+
+// Import schemas and types from single source of truth
+import {
+  createCategorySchema,
+  updateCategorySchema,
+  type CategoryWithCount,
+} from '../tasks'
 
 // Helper to get todo count for a category
-async function getTodoCount(categoryId: string) {
+async function getTodoCount(categoryId: string): Promise<number> {
   const [result] = await db
     .select({
       count: sql<number>`count(distinct ${todoCategories.todoId})`,
@@ -20,7 +26,7 @@ async function getTodoCount(categoryId: string) {
 
 // Get all categories with todo counts
 export const getCategories = createServerFn({ method: 'GET' }).handler(
-  async () => {
+  async (): Promise<CategoryWithCount[]> => {
     return Sentry.startSpan({ name: 'getCategories' }, async () => {
       const allCategories = await db.query.categories.findMany({
         orderBy: (categories, { asc }) => [asc(categories.name)],
@@ -39,7 +45,7 @@ export const getCategories = createServerFn({ method: 'GET' }).handler(
 // Get a single category by ID
 export const getCategoryById = createServerFn({ method: 'GET' })
   .inputValidator(z.uuid())
-  .handler(async (ctx) => {
+  .handler(async (ctx): Promise<CategoryWithCount> => {
     return Sentry.startSpan({ name: 'getCategoryById' }, async () => {
       const category = await db.query.categories.findFirst({
         where: eq(categories.id, ctx.data),
@@ -59,7 +65,7 @@ export const getCategoryById = createServerFn({ method: 'GET' })
 // Create a new category
 export const createCategory = createServerFn({ method: 'POST' })
   .inputValidator(createCategorySchema)
-  .handler(async (ctx) => {
+  .handler(async (ctx): Promise<CategoryWithCount> => {
     return Sentry.startSpan({ name: 'createCategory' }, async () => {
       const data = createCategorySchema.parse(ctx.data)
       const [newCategory] = await db
@@ -80,7 +86,7 @@ export const createCategory = createServerFn({ method: 'POST' })
 // Update a category
 export const updateCategory = createServerFn({ method: 'POST' })
   .inputValidator(updateCategorySchema)
-  .handler(async (ctx) => {
+  .handler(async (ctx): Promise<CategoryWithCount> => {
     return Sentry.startSpan({ name: 'updateCategory' }, async () => {
       const data = updateCategorySchema.parse(ctx.data)
       const { id, ...updateData } = data
@@ -100,8 +106,8 @@ export const updateCategory = createServerFn({ method: 'POST' })
 
 // Delete a category (cascades to todo_categories via DB constraints)
 export const deleteCategory = createServerFn({ method: 'POST' })
-  .inputValidator(z.string().uuid())
-  .handler(async (ctx) => {
+  .inputValidator(z.uuid())
+  .handler(async (ctx): Promise<{ success: boolean; id: string }> => {
     return Sentry.startSpan({ name: 'deleteCategory' }, async () => {
       const id = ctx.data
       await db.delete(categories).where(eq(categories.id, id))
@@ -109,53 +115,63 @@ export const deleteCategory = createServerFn({ method: 'POST' })
     })
   })
 
+// Input schema for assigning categories - defined locally since it's specific to this function
+const assignCategoriesInputSchema = z.object({
+  todoId: z.uuid(),
+  categoryIds: z.array(z.uuid()),
+})
+
 // Assign categories to a todo
 export const assignCategoriesToTodo = createServerFn({ method: 'POST' })
-  .inputValidator(
-    z.object({
-      todoId: z.string().uuid(),
-      categoryIds: z.array(z.string().uuid()),
-    }),
+  .inputValidator(assignCategoriesInputSchema)
+  .handler(
+    async (
+      ctx,
+    ): Promise<{ success: boolean; todoId: string; categoryIds: string[] }> => {
+      return Sentry.startSpan({ name: 'assignCategoriesToTodo' }, async () => {
+        const { todoId, categoryIds } = ctx.data
+
+        // Remove existing category assignments
+        await db.delete(todoCategories).where(eq(todoCategories.todoId, todoId))
+
+        // Add new category assignments
+        if (categoryIds.length > 0) {
+          await db.insert(todoCategories).values(
+            categoryIds.map((categoryId) => ({
+              todoId,
+              categoryId,
+            })),
+          )
+        }
+
+        return { success: true, todoId, categoryIds }
+      })
+    },
   )
-  .handler(async (ctx) => {
-    return Sentry.startSpan({ name: 'assignCategoriesToTodo' }, async () => {
-      const { todoId, categoryIds } = ctx.data
 
-      // Remove existing category assignments
-      await db.delete(todoCategories).where(eq(todoCategories.todoId, todoId))
-
-      // Add new category assignments
-      if (categoryIds.length > 0) {
-        await db.insert(todoCategories).values(
-          categoryIds.map((categoryId) => ({
-            todoId,
-            categoryId,
-          })),
-        )
-      }
-
-      return { success: true, todoId, categoryIds }
-    })
-  })
+// Input schema for removing a category from a todo
+const removeCategoryInputSchema = z.object({
+  todoId: z.uuid(),
+  categoryId: z.uuid(),
+})
 
 // Remove a category from a todo
 export const removeCategoryFromTodo = createServerFn({ method: 'POST' })
-  .inputValidator(
-    z.object({
-      todoId: z.string().uuid(),
-      categoryId: z.string().uuid(),
-    }),
+  .inputValidator(removeCategoryInputSchema)
+  .handler(
+    async (
+      ctx,
+    ): Promise<{ success: boolean; todoId: string; categoryId: string }> => {
+      return Sentry.startSpan({ name: 'removeCategoryFromTodo' }, async () => {
+        const { todoId, categoryId } = ctx.data
+
+        await db
+          .delete(todoCategories)
+          .where(
+            sql`${todoCategories.todoId} = ${todoId} AND ${todoCategories.categoryId} = ${categoryId}`,
+          )
+
+        return { success: true, todoId, categoryId }
+      })
+    },
   )
-  .handler(async (ctx) => {
-    return Sentry.startSpan({ name: 'removeCategoryFromTodo' }, async () => {
-      const { todoId, categoryId } = ctx.data
-
-      await db
-        .delete(todoCategories)
-        .where(
-          sql`${todoCategories.todoId} = ${todoId} AND ${todoCategories.categoryId} = ${categoryId}`,
-        )
-
-      return { success: true, todoId, categoryId }
-    })
-  })

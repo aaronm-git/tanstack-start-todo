@@ -4,59 +4,51 @@ import { z } from 'zod'
 import { db } from '../../db'
 import { todos, todoCategories } from '../../db/schema'
 import { eq, isNull, desc, asc } from 'drizzle-orm'
-import { createTodoSchema, updateTodoSchema } from '../tasks'
 
-// Shared query config for todos with relations
-const todoWithRelationsConfig = {
-  categories: {
-    with: {
-      category: true,
-    },
-  },
-  subtasks: {
-    with: {
-      categories: {
-        with: {
-          category: true,
-        },
-      },
-    },
-    orderBy: [asc(todos.createdAt)],
-  },
-  parent: true,
-} as const
+// Import schemas and config from single source of truth
+import {
+  createTodoSchema,
+  updateTodoSchema,
+  todoWithRelationsQueryConfig,
+  type TodoWithRelations,
+  type Todo,
+} from '../tasks'
 
 // Get all todos with their categories and subtasks
-export const getTodos = createServerFn({ method: 'GET' }).handler(async () => {
-  return Sentry.startSpan({ name: 'getTodos' }, async () => {
-    return db.query.todos.findMany({
-      with: todoWithRelationsConfig,
-      where: isNull(todos.parentId), // Only get top-level todos
-      orderBy: [
-        desc(todos.priority),
-        asc(todos.dueDate),
-        desc(todos.createdAt),
-      ],
+export const getTodos = createServerFn({ method: 'GET' }).handler(
+  async (): Promise<TodoWithRelations[]> => {
+    return Sentry.startSpan({ name: 'getTodos' }, async () => {
+      const result = await db.query.todos.findMany({
+        with: todoWithRelationsQueryConfig,
+        where: isNull(todos.parentId), // Only get top-level todos
+        orderBy: [
+          desc(todos.priority),
+          asc(todos.dueDate),
+          desc(todos.createdAt),
+        ],
+      })
+      return result as TodoWithRelations[]
     })
-  })
-})
+  },
+)
 
 // Get a single todo by ID
 export const getTodoById = createServerFn({ method: 'GET' })
   .inputValidator(z.uuid())
-  .handler(async (ctx) => {
+  .handler(async (ctx): Promise<TodoWithRelations | undefined> => {
     return Sentry.startSpan({ name: 'getTodoById' }, async () => {
-      return db.query.todos.findFirst({
+      const result = await db.query.todos.findFirst({
         where: eq(todos.id, ctx.data),
-        with: todoWithRelationsConfig,
+        with: todoWithRelationsQueryConfig,
       })
+      return result as TodoWithRelations | undefined
     })
   })
 
 // Create a new todo
 export const createTodo = createServerFn({ method: 'POST' })
   .inputValidator(createTodoSchema)
-  .handler(async (ctx) => {
+  .handler(async (ctx): Promise<TodoWithRelations | undefined> => {
     return Sentry.startSpan({ name: 'createTodo' }, async () => {
       const data = createTodoSchema.parse(ctx.data)
 
@@ -72,7 +64,7 @@ export const createTodo = createServerFn({ method: 'POST' })
         })
         .returning()
 
-      const newTodo = result[0]
+      const newTodo = (result as Todo[])[0]
 
       // Assign categories if provided
       if (data.categoryIds && data.categoryIds.length > 0) {
@@ -85,17 +77,18 @@ export const createTodo = createServerFn({ method: 'POST' })
       }
 
       // Fetch the complete todo with relations
-      return db.query.todos.findFirst({
+      const todoWithRelations = await db.query.todos.findFirst({
         where: eq(todos.id, newTodo.id),
-        with: todoWithRelationsConfig,
+        with: todoWithRelationsQueryConfig,
       })
+      return todoWithRelations as TodoWithRelations | undefined
     })
   })
 
 // Update a todo
 export const updateTodo = createServerFn({ method: 'POST' })
   .inputValidator(updateTodoSchema)
-  .handler(async (ctx) => {
+  .handler(async (ctx): Promise<TodoWithRelations | undefined> => {
     return Sentry.startSpan({ name: 'updateTodo' }, async () => {
       const data = updateTodoSchema.parse(ctx.data)
       const { id, categoryIds, ...updateData } = data
@@ -125,17 +118,18 @@ export const updateTodo = createServerFn({ method: 'POST' })
       }
 
       // Fetch the updated todo with relations
-      return db.query.todos.findFirst({
+      const todoWithRelations = await db.query.todos.findFirst({
         where: eq(todos.id, id),
-        with: todoWithRelationsConfig,
+        with: todoWithRelationsQueryConfig,
       })
+      return todoWithRelations as TodoWithRelations | undefined
     })
   })
 
 // Toggle todo completion status
 export const toggleTodoComplete = createServerFn({ method: 'POST' })
-  .inputValidator(z.string().uuid())
-  .handler(async (ctx) => {
+  .inputValidator(z.uuid())
+  .handler(async (ctx): Promise<Todo> => {
     return Sentry.startSpan({ name: 'toggleTodoComplete' }, async () => {
       const id = ctx.data
 
@@ -149,20 +143,21 @@ export const toggleTodoComplete = createServerFn({ method: 'POST' })
       }
 
       // Toggle the status
-      const [updated] = await db
+      const result = await db
         .update(todos)
         .set({ isComplete: !todo.isComplete })
         .where(eq(todos.id, id))
         .returning()
 
+      const updated = result[0] as Todo
       return updated
     })
   })
 
 // Delete a todo (cascades to subtasks and categories via DB constraints)
 export const deleteTodo = createServerFn({ method: 'POST' })
-  .inputValidator(z.string().uuid())
-  .handler(async (ctx) => {
+  .inputValidator(z.uuid())
+  .handler(async (ctx): Promise<{ success: boolean; id: string }> => {
     return Sentry.startSpan({ name: 'deleteTodo' }, async () => {
       const id = ctx.data
       await db.delete(todos).where(eq(todos.id, id))
@@ -174,10 +169,10 @@ export const deleteTodo = createServerFn({ method: 'POST' })
 export const createSubtask = createServerFn({ method: 'POST' })
   .inputValidator(
     createTodoSchema.extend({
-      parentId: z.string().uuid(),
+      parentId: z.uuid(),
     }),
   )
-  .handler(async (ctx) => {
+  .handler(async (ctx): Promise<TodoWithRelations | undefined> => {
     return Sentry.startSpan({ name: 'createSubtask' }, async () => {
       const validated = createTodoSchema.parse(ctx.data)
       return createTodo({
@@ -186,9 +181,30 @@ export const createSubtask = createServerFn({ method: 'POST' })
     })
   })
 
+// Stats type for getTodoStats return value
+export interface TodoStats {
+  totalTasks: number
+  completedTasks: number
+  pendingTasks: number
+  completionRate: number
+  priorityStats: {
+    critical: number
+    urgent: number
+    high: number
+    medium: number
+    low: number
+  }
+  tasksDueToday: number
+  tasksDueTomorrow: number
+  tasksDueThisWeek: number
+  overdueTasks: number
+  recentlyCompleted: number
+  totalCategories: number
+}
+
 // Get statistics for the homepage
 export const getTodoStats = createServerFn({ method: 'GET' }).handler(
-  async () => {
+  async (): Promise<TodoStats> => {
     return Sentry.startSpan({ name: 'getTodoStats' }, async () => {
       // Get all todos (including subtasks)
       const allTodos = await db.query.todos.findMany()

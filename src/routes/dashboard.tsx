@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState, useMemo, useEffect } from 'react'
-import { Plus, LogOut, Sun, Moon, Monitor, Menu } from 'lucide-react'
+import { Plus, LogOut, Sun, Moon, Monitor, Menu, Sparkles } from 'lucide-react'
 import { useSession, signOut } from '../lib/auth-client'
 import { useTheme } from '../components/theme-provider'
 import { useIsMobile } from '../hooks/use-mobile'
@@ -53,6 +53,7 @@ import {
 import { TodoList } from '../components/todos/todo-list'
 import { TodoDetailPanel } from '../components/todos/todo-detail-panel'
 import { TodoDialog, type TodoFormData } from '../components/todos/todo-dialog'
+import { AITodoDialog } from '../components/todos/ai-todo-dialog'
 import { TodoFilters, type TodoFilters as TodoFiltersType } from '../components/todos/todo-filters'
 import { CategorySidebar } from '../components/categories/category-sidebar'
 import { CategoryDialog, type CategoryFormData } from '../components/categories/category-dialog'
@@ -79,6 +80,7 @@ function DashboardPage() {
 
   // State for dialogs
   const [todoDialogOpen, setTodoDialogOpen] = useState(false)
+  const [aiTodoDialogOpen, setAiTodoDialogOpen] = useState(false)
   const [categoryDialogOpen, setCategoryDialogOpen] = useState(false)
   const [editingTodo, setEditingTodo] = useState<TodoWithRelations | null>(null)
   const [editingCategory, setEditingCategory] = useState<CategoryWithCount | null>(null)
@@ -311,6 +313,20 @@ function DashboardPage() {
     setTodoDialogOpen(true)
   }
 
+  const handleAICreateTodo = () => {
+    setAiTodoDialogOpen(true)
+  }
+
+  const handleAITodoSuccess = (todo: TodoWithRelations) => {
+    // Refresh the queries and select the new todo
+    queryClient.invalidateQueries({ queryKey: ['todos'] })
+    queryClient.invalidateQueries({ queryKey: ['categories'] })
+    setSelectedTodo(todo)
+    if (isMobile) {
+      setDetailPanelOpen(true)
+    }
+  }
+
   const handleSelectTodo = (todo: TodoWithRelations) => {
     setSelectedTodo(todo)
     if (isMobile) {
@@ -517,6 +533,10 @@ function DashboardPage() {
               </Badge>
             </div>
             <div className="flex items-center gap-2">
+              <Button onClick={handleAICreateTodo} size="sm" variant="outline" className="gap-2">
+                <Sparkles className="h-4 w-4" />
+                <span className="hidden sm:inline">AI Create</span>
+              </Button>
               <Button onClick={handleCreateTodo} size="sm" className="gap-2">
                 <Plus className="h-4 w-4" />
                 <span className="hidden sm:inline">New Todo</span>
@@ -625,6 +645,13 @@ function DashboardPage() {
         isSubmitting={
           createTodoMutation.isPending || updateTodoMutation.isPending
         }
+      />
+
+      <AITodoDialog
+        open={aiTodoDialogOpen}
+        onOpenChange={setAiTodoDialogOpen}
+        onSuccess={handleAITodoSuccess}
+        categories={categories}
       />
 
       <CategoryDialog

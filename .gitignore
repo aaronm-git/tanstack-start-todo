@@ -15,3 +15,29 @@ todos.json
 
 # Local Netlify folder
 .netlify
+
+# media
+*.mp4
+*.mov
+*.avi
+*.mkv
+*.flv
+*.wmv
+*.webm
+*.mpg
+*.mpeg
+*.m4v
+*.m4p
+*.m4b
+# images
+*.jpg
+*.jpeg
+*.png
+*.gif
+*.svg
+*.webp
+*.ico
+*.bmp
+*.tiff
+*.tif
+*.eps

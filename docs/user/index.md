@@ -7,4 +7,5 @@ Docs for frontend users: what the app can do and how to use it.
 - [Authentication (Clerk)](./authentication.md)
 - [Chat](./chat.md)
 - [Routing](./routing.md)
+- [AI Todo Creation](./ai-todo.md)
 

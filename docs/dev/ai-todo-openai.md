@@ -1,0 +1,184 @@
+# AI Todo Creation (OpenAI)
+
+AI-powered task creation feature that uses OpenAI's GPT-4.1-nano model via TanStack AI to parse natural language prompts and automatically generate structured todos with subtasks, priorities, due dates, and category suggestions.
+
+## Where to look in the code
+
+- **Server function**: `src/lib/server/ai.ts` - `generateTodoWithAI` server function
+- **UI component**: `src/components/todos/ai-todo-dialog.tsx` - Dialog component for AI prompt input
+- **Integration**: `src/routes/dashboard.tsx` - Button and handlers for opening AI dialog
+- **Type definitions**: `src/lib/tasks.ts` - `TodoWithRelations` schema and types
+
+## Architecture
+
+### Flow
+
+```
+User Input (Natural Language)
+    ↓
+AITodoDialog Component
+    ↓
+generateTodoWithAI Server Function
+    ↓
+TanStack AI chat() with outputSchema
+    ↓
+OpenAI API (gpt-4.1-nano) with Structured Output
+    ↓
+Automatic Zod Schema Validation
+    ↓
+Database Insert (todos + subtasks + categories)
+    ↓
+Return TodoWithRelations
+```
+
+### Key Components
+
+#### Server Function (`src/lib/server/ai.ts`)
+
+- **Input**: `{ prompt: string, categories: Array<{id, name}> }`
+- **Output**: `TodoWithRelations` (validated via Zod schema)
+- **Implementation**: Uses TanStack AI's `chat()` function with `outputSchema` for structured output
+- **Process**:
+  1. Builds system prompt with current date and available categories
+  2. Calls TanStack AI's `chat()` with:
+     - `adapter`: `openaiText('gpt-4.1-nano')`
+     - `systemPrompts`: Array with instructions
+     - `messages`: User's prompt
+     - `outputSchema`: `aiGeneratedTodoSchema` (Zod 4 schema)
+  3. TanStack AI automatically validates response against Zod schema
+  4. Matches suggested categories to actual category IDs
+  5. Parses and validates due date
+  6. Creates main todo in database
+  7. Creates subtasks (if any) with inherited priority/due date
+  8. Assigns matched categories
+  9. Returns complete todo with relations
+
+#### AI Schema (`aiGeneratedTodoSchema`)
+
+Defines the structured output format using Zod 4:
+- `name`: Task name - String with detailed description for AI guidance
+- `description`: Detailed description - Uses `.nullish()` to accept null, undefined, or omitted
+- `priority`: Enum ['low', 'medium', 'high', 'urgent', 'critical'] with detailed descriptions
+- `dueDate`: ISO 8601 date string - Uses `.nullish()` to accept null, undefined, or omitted
+- `suggestedCategories`: Array of category names to match from available categories
+- `subtasks`: Array of subtask objects (name, description) - Empty array if no breakdown needed
+
+**Key improvements**:
+- Uses `.nullish()` instead of `.nullable()` or `.optional()` for better OpenAI compatibility
+- Each field has detailed `.describe()` strings with examples to guide the AI
+- Subtask schema also uses `.nullish()` for flexible description handling
+
+#### UI Component (`src/components/todos/ai-todo-dialog.tsx`)
+
+- Uses `useMutation` from TanStack Query
+- Validates server response with `todoWithRelationsSchema.parse()`
+- Provides example prompts for user guidance
+- Handles loading states and error messages
+
+## Configuration
+
+### Environment Variables
+
+- `OPENAI_API_KEY` - OpenAI API key (required)
+- `OPENAI_API_PROJECT_ID` - OpenAI project ID (optional, for usage tracking)
+
+### Model Configuration
+
+Currently uses `gpt-4.1-nano` model via TanStack AI. To change:
+1. Edit `src/lib/server/ai.ts` in the `chat()` call
+2. Update the `adapter` parameter: `openaiText('model-name')`
+3. See [TanStack AI OpenAI adapter docs](https://tanstack.com/ai/latest/docs/adapters/openai) for available models
+
+## System Prompt
+
+The system prompt instructs the AI to:
+1. Create concise, actionable task names
+2. Add helpful descriptions when context is implied
+3. Infer priority from urgency indicators
+4. Parse relative dates (tomorrow, next Monday, etc.) to ISO 8601
+5. Match tasks to available categories
+6. Create subtasks when multiple items are mentioned (e.g., "Buy groceries - milk, eggs, bread")
+
+## Subtask Detection
+
+The AI automatically detects when a prompt contains multiple items and creates subtasks:
+- **Example**: "Buy groceries tomorrow - milk, eggs, and bread"
+  - Main task: "Buy groceries"
+  - Subtasks: ["milk", "eggs", "bread"]
+- Subtasks inherit priority and due date from parent task
+
+## Type Safety
+
+Uses Zod 4 schemas for comprehensive type safety:
+- **Database schemas**: Generated from Drizzle tables via `drizzle-zod` (e.g., `todoSchema`, `categorySchema`)
+- **AI schemas**: Hand-crafted with `.nullish()` and detailed descriptions (e.g., `aiGeneratedTodoSchema`)
+- **TanStack AI integration**: `outputSchema` parameter provides automatic validation and type inference
+- **Types derived**: All TypeScript types via `z.infer<typeof schema>`
+- **Single source of truth**: Database schema → Zod → TypeScript types
+
+**Zod 4 benefits**:
+- `.nullish()` accepts missing, null, or undefined values (better than `.nullable()` or `.optional()`)
+- Detailed `.describe()` strings guide the AI model's responses
+- TanStack AI automatically converts Zod schemas to JSON Schema for OpenAI
+
+## Error Handling
+
+- Server function throws errors for database failures
+- Client component shows toast notifications for errors
+- Zod validation ensures response structure matches expected schema
+
+## TanStack AI Integration
+
+### Why TanStack AI?
+
+Using TanStack AI instead of direct OpenAI API calls provides:
+- **Automatic schema conversion**: Zod → JSON Schema for OpenAI
+- **Built-in validation**: Response is validated against `outputSchema` automatically
+- **Type safety**: Full TypeScript inference from Zod schemas
+- **Framework agnostic**: Works with TanStack Start, Next.js, etc.
+- **Provider flexibility**: Easy to swap OpenAI for Anthropic, Gemini, etc.
+
+### Implementation Pattern
+
+```typescript
+import { chat } from '@tanstack/ai'
+import { openaiText } from '@tanstack/ai-openai'
+
+const result = await chat({
+  adapter: openaiText('gpt-4.1-nano'),
+  systemPrompts: [systemPrompt],
+  messages: [{ role: 'user', content: prompt }],
+  outputSchema: aiGeneratedTodoSchema, // Zod 4 schema
+})
+// result is fully typed and validated!
+```
+
+### Troubleshooting
+
+**"Expected string, received undefined" errors:**
+- Use `.nullish()` instead of `.nullable()` or `.optional()`
+- Ensure all fields have detailed `.describe()` strings
+- Check that enum values are plain arrays, not drizzle-zod generated enums
+
+**Schema conversion issues:**
+- Avoid complex Zod modifiers like `.transform()` or `.refine()` in AI schemas
+- Use simple types: `z.string()`, `z.number()`, `z.boolean()`, `z.array()`, `z.object()`
+- Keep nested objects shallow when possible
+
+**Package versions:**
+- `@tanstack/ai`: 0.2.2 or later
+- `zod`: 4.3.5 or later (Zod 4.2+ required for TanStack AI)
+- `@tanstack/ai-openai`: Latest
+
+## Sentry Instrumentation
+
+The server function is wrapped with Sentry instrumentation:
+```typescript
+Sentry.startSpan({ name: 'generateTodoWithAI' }, async () => {
+  // ... implementation
+})
+```
+
+## User documentation
+
+- [How to use AI Todo Creation](../user/ai-todo.md)
