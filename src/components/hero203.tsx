@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 
 const HERO_VIDEO_SRC =
-  '/video.mp4'
+  'https://wwdgqcc94q.ufs.sh/f/ivcA5za78HmCHPblHlTAScCm6XQhFftODxPk574jzag2uyKR'
 
 const Hero203 = () => {
   const { data: session } = useSession()
