@@ -8,11 +8,11 @@ import {
   Clock,
   FolderKanban,
   Target,
-  Flame,
   ArrowRight,
   Sun,
   Moon,
   Monitor,
+  Sparkles,
 } from 'lucide-react'
 import { useSession } from '../lib/auth-client'
 import { useTheme } from '../components/theme-provider'
@@ -95,17 +95,17 @@ function App() {
           <div className="flex flex-col items-center space-y-8 text-center">
             <div className="space-y-6">
               <Badge variant="secondary" className="mb-4 px-4 py-1.5 text-sm font-medium">
-                <Flame className="mr-1.5 h-3.5 w-3.5" />
-                The Smart Way to Stay Organized
+                <Sparkles className="mr-1.5 h-3.5 w-3.5" />
+                Powered by AI • The Future of Task Management
               </Badge>
               <h1 className="text-4xl font-bold tracking-tight sm:text-5xl md:text-6xl lg:text-7xl/none">
-                Stop Forgetting.
+                Your AI Assistant
                 <br />
-                <span className="text-primary">Start Accomplishing.</span>
+                <span className="text-primary">for Getting Things Done.</span>
               </h1>
               <p className="mx-auto max-w-[800px] text-lg text-muted-foreground md:text-xl lg:text-2xl leading-relaxed">
-                <strong className="text-foreground">Toodyloo</strong> is the smart to-do app that helps you focus on what matters. 
-                Organize tasks, track progress, and achieve your goals—all in one beautiful, intuitive interface.
+                <strong className="text-foreground">Toodyloo</strong> uses advanced AI to understand your goals, suggest tasks, 
+                prioritize what matters, and help you accomplish more. Just tell it what you need—in plain English—and watch it work.
               </p>
             </div>
 
@@ -164,10 +164,11 @@ function App() {
         <div className="container px-4 mx-auto md:px-6">
           <div className="text-center mb-12">
             <h2 className="text-3xl font-bold tracking-tight sm:text-4xl mb-3">
-              Your Productivity, Visualized
+              AI-Powered Insights at Your Fingertips
             </h2>
             <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
-              See your progress at a glance. Every task completed is a step closer to your goals.
+              Our AI analyzes your productivity patterns and shows you exactly where you're excelling. 
+              Every task completed teaches the AI how to help you better.
             </p>
           </div>
 
@@ -463,11 +464,11 @@ function App() {
           <div className="container px-4 md:px-6 mx-auto">
             <div className="flex flex-col items-center space-y-6 text-center max-w-3xl mx-auto">
               <h2 className="text-3xl font-bold tracking-tight sm:text-4xl md:text-5xl">
-                Ready to Transform Your Productivity?
+                Ready to Experience AI-Powered Productivity?
               </h2>
               <p className="mx-auto text-lg md:text-xl text-primary-foreground/90 leading-relaxed">
-                Join thousands who've already discovered the smart way to stay organized. 
-                Start your free account today—no credit card required, no commitment, just results.
+                Join thousands who've already discovered how AI can transform their task management. 
+                Start your free account today—no credit card required, no commitment, just intelligent assistance.
               </p>
               <div className="flex flex-col sm:flex-row items-center gap-4 pt-2">
                 <Button asChild size="lg" variant="secondary" className="gap-2 text-base px-8 h-12 bg-background text-foreground hover:bg-background/90">
@@ -483,11 +484,11 @@ function App() {
               <div className="flex flex-wrap items-center justify-center gap-8 pt-6 text-sm text-primary-foreground/80">
                 <div className="flex items-center gap-2">
                   <CheckCircle2 className="h-4 w-4" />
-                  <span>Unlimited Tasks</span>
+                  <span>AI Features Included</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <CheckCircle2 className="h-4 w-4" />
-                  <span>All Features Included</span>
+                  <span>Unlimited Tasks</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <CheckCircle2 className="h-4 w-4" />

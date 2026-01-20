@@ -11,6 +11,8 @@ export const auth = betterAuth({
   }),
   emailAndPassword: {
     enabled: true,
+    minPasswordLength: 2,
+    maxPasswordLength: 100,
     /**
      * Dev-only password reset delivery:
      * Better Auth generates the reset URL; we log it so you can copy/paste it.
