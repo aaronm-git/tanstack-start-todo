@@ -52,7 +52,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
       <head>
         <HeadContent />
       </head>
-      <body className="pb-12">
+      <body>
         <ThemeProvider defaultTheme="system" storageKey="toodyloo-theme">
           {children}
           <Footer />

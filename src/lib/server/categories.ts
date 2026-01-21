@@ -2,74 +2,74 @@ import { createServerFn } from '@tanstack/react-start'
 import * as Sentry from '@sentry/tanstackstart-react'
 import { z } from 'zod'
 import { db } from '../../db'
-import { categories, todoCategories } from '../../db/schema'
+import { lists, todos } from '../../db/schema'
 import { eq, sql } from 'drizzle-orm'
 
 // Import schemas and types from single source of truth
 import {
-  createCategorySchema,
-  updateCategorySchema,
-  type CategoryWithCount,
+  createListSchema,
+  updateListSchema,
+  type ListWithCount,
 } from '../tasks'
 
-// Helper to get todo count for a category
-async function getTodoCount(categoryId: string): Promise<number> {
+// Helper to get todo count for a list
+async function getTodoCount(listId: string): Promise<number> {
   const [result] = await db
     .select({
-      count: sql<number>`count(distinct ${todoCategories.todoId})`,
+      count: sql<number>`count(*)`,
     })
-    .from(todoCategories)
-    .where(eq(todoCategories.categoryId, categoryId))
+    .from(todos)
+    .where(eq(todos.listId, listId))
 
   return Number(result?.count || 0)
 }
 
-// Get all categories with todo counts
-export const getCategories = createServerFn({ method: 'GET' }).handler(
-  async (): Promise<CategoryWithCount[]> => {
-    return Sentry.startSpan({ name: 'getCategories' }, async () => {
-      const allCategories = await db.query.categories.findMany({
-        orderBy: (categories, { asc }) => [asc(categories.name)],
+// Get all lists with todo counts
+export const getLists = createServerFn({ method: 'GET' }).handler(
+  async (): Promise<ListWithCount[]> => {
+    return Sentry.startSpan({ name: 'getLists' }, async () => {
+      const allLists = await db.query.lists.findMany({
+        orderBy: (lists, { asc }) => [asc(lists.name)],
       })
 
       return Promise.all(
-        allCategories.map(async (category) => ({
-          ...category,
-          todoCount: await getTodoCount(category.id),
+        allLists.map(async (list) => ({
+          ...list,
+          todoCount: await getTodoCount(list.id),
         })),
       )
     })
   },
 )
 
-// Get a single category by ID
-export const getCategoryById = createServerFn({ method: 'GET' })
+// Get a single list by ID
+export const getListById = createServerFn({ method: 'GET' })
   .inputValidator(z.uuid())
-  .handler(async (ctx): Promise<CategoryWithCount> => {
-    return Sentry.startSpan({ name: 'getCategoryById' }, async () => {
-      const category = await db.query.categories.findFirst({
-        where: eq(categories.id, ctx.data),
+  .handler(async (ctx): Promise<ListWithCount> => {
+    return Sentry.startSpan({ name: 'getListById' }, async () => {
+      const list = await db.query.lists.findFirst({
+        where: eq(lists.id, ctx.data),
       })
 
-      if (!category) {
-        throw new Error('Category not found')
+      if (!list) {
+        throw new Error('List not found')
       }
 
       return {
-        ...category,
-        todoCount: await getTodoCount(category.id),
+        ...list,
+        todoCount: await getTodoCount(list.id),
       }
     })
   })
 
-// Create a new category
-export const createCategory = createServerFn({ method: 'POST' })
-  .inputValidator(createCategorySchema)
-  .handler(async (ctx): Promise<CategoryWithCount> => {
-    return Sentry.startSpan({ name: 'createCategory' }, async () => {
-      const data = createCategorySchema.parse(ctx.data)
-      const [newCategory] = await db
-        .insert(categories)
+// Create a new list
+export const createList = createServerFn({ method: 'POST' })
+  .inputValidator(createListSchema)
+  .handler(async (ctx): Promise<ListWithCount> => {
+    return Sentry.startSpan({ name: 'createList' }, async () => {
+      const data = createListSchema.parse(ctx.data)
+      const [newList] = await db
+        .insert(lists)
         .values({
           name: data.name,
           color: data.color,
@@ -77,24 +77,24 @@ export const createCategory = createServerFn({ method: 'POST' })
         .returning()
 
       return {
-        ...newCategory,
+        ...newList,
         todoCount: 0,
       }
     })
   })
 
 // Update a category
-export const updateCategory = createServerFn({ method: 'POST' })
-  .inputValidator(updateCategorySchema)
-  .handler(async (ctx): Promise<CategoryWithCount> => {
-    return Sentry.startSpan({ name: 'updateCategory' }, async () => {
-      const data = updateCategorySchema.parse(ctx.data)
+export const updateList = createServerFn({ method: 'POST' })
+  .inputValidator(updateListSchema)
+  .handler(async (ctx): Promise<ListWithCount> => {
+    return Sentry.startSpan({ name: 'updateList' }, async () => {
+      const data = updateListSchema.parse(ctx.data)
       const { id, ...updateData } = data
 
       const [updated] = await db
-        .update(categories)
+        .update(lists)
         .set(updateData)
-        .where(eq(categories.id, id))
+        .where(eq(lists.id, id))
         .returning()
 
       return {
@@ -104,74 +104,16 @@ export const updateCategory = createServerFn({ method: 'POST' })
     })
   })
 
-// Delete a category (cascades to todo_categories via DB constraints)
-export const deleteCategory = createServerFn({ method: 'POST' })
+// Delete a list (sets todos.listId to null via DB constraint)
+export const deleteList = createServerFn({ method: 'POST' })
   .inputValidator(z.uuid())
   .handler(async (ctx): Promise<{ success: boolean; id: string }> => {
-    return Sentry.startSpan({ name: 'deleteCategory' }, async () => {
+    return Sentry.startSpan({ name: 'deleteList' }, async () => {
       const id = ctx.data
-      await db.delete(categories).where(eq(categories.id, id))
+      await db.delete(lists).where(eq(lists.id, id))
       return { success: true, id }
     })
   })
 
-// Input schema for assigning categories - defined locally since it's specific to this function
-const assignCategoriesInputSchema = z.object({
-  todoId: z.uuid(),
-  categoryIds: z.array(z.uuid()),
-})
-
-// Assign categories to a todo
-export const assignCategoriesToTodo = createServerFn({ method: 'POST' })
-  .inputValidator(assignCategoriesInputSchema)
-  .handler(
-    async (
-      ctx,
-    ): Promise<{ success: boolean; todoId: string; categoryIds: string[] }> => {
-      return Sentry.startSpan({ name: 'assignCategoriesToTodo' }, async () => {
-        const { todoId, categoryIds } = ctx.data
-
-        // Remove existing category assignments
-        await db.delete(todoCategories).where(eq(todoCategories.todoId, todoId))
-
-        // Add new category assignments
-        if (categoryIds.length > 0) {
-          await db.insert(todoCategories).values(
-            categoryIds.map((categoryId) => ({
-              todoId,
-              categoryId,
-            })),
-          )
-        }
-
-        return { success: true, todoId, categoryIds }
-      })
-    },
-  )
-
-// Input schema for removing a category from a todo
-const removeCategoryInputSchema = z.object({
-  todoId: z.uuid(),
-  categoryId: z.uuid(),
-})
-
-// Remove a category from a todo
-export const removeCategoryFromTodo = createServerFn({ method: 'POST' })
-  .inputValidator(removeCategoryInputSchema)
-  .handler(
-    async (
-      ctx,
-    ): Promise<{ success: boolean; todoId: string; categoryId: string }> => {
-      return Sentry.startSpan({ name: 'removeCategoryFromTodo' }, async () => {
-        const { todoId, categoryId } = ctx.data
-
-        await db
-          .delete(todoCategories)
-          .where(
-            sql`${todoCategories.todoId} = ${todoId} AND ${todoCategories.categoryId} = ${categoryId}`,
-          )
-
-        return { success: true, todoId, categoryId }
-      })
-    },
-  )
+// Note: Bulk assign/remove operations are no longer needed since todos have a single listId field.
+// To update a todo's list, use the updateTodo function with listId.

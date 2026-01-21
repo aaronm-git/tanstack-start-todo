@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { format } from 'date-fns'
-import { CalendarIcon, Check, ChevronsUpDown } from 'lucide-react'
+import { CalendarIcon } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -22,18 +22,10 @@ import {
 } from '../ui/select'
 import { Calendar } from '../ui/calendar'
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover'
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from '../ui/command'
 import { Badge } from '../ui/badge'
 import { cn } from '../../lib/utils'
 import { priorityLabels, type Priority } from '../../lib/tasks'
-import type { TodoWithRelations, CategoryWithCount } from '../../lib/tasks'
+import type { TodoWithRelations, ListWithCount } from '../../lib/tasks'
 
 // Default priority value
 const DEFAULT_PRIORITY: Priority = 'low'
@@ -47,10 +39,8 @@ interface TodoDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   onSubmit: (data: TodoFormData) => void
-  categories: CategoryWithCount[]
-  todos?: TodoWithRelations[]
+  categories: ListWithCount[]
   editTodo?: TodoWithRelations | null
-  parentId?: string | null
   isSubmitting?: boolean
 }
 
@@ -59,8 +49,7 @@ export interface TodoFormData {
   description: string
   priority: Priority
   dueDate: Date | null
-  categoryIds: string[]
-  parentId?: string | null
+  listId: string | null
 }
 
 export function TodoDialog({
@@ -68,9 +57,7 @@ export function TodoDialog({
   onOpenChange,
   onSubmit,
   categories,
-  todos = [],
   editTodo,
-  parentId,
   isSubmitting = false,
 }: TodoDialogProps) {
   const [formData, setFormData] = useState<TodoFormData>({
@@ -78,11 +65,8 @@ export function TodoDialog({
     description: '',
     priority: DEFAULT_PRIORITY,
     dueDate: null,
-    categoryIds: [],
-    parentId: parentId || null,
+    listId: null,
   })
-
-  const [categoryOpen, setCategoryOpen] = useState(false)
 
   // Reset form when dialog opens/closes or editTodo changes
   useEffect(() => {
@@ -93,8 +77,7 @@ export function TodoDialog({
           description: editTodo.description,
           priority: editTodo.priority,
           dueDate: editTodo.dueDate ? new Date(editTodo.dueDate) : null,
-          categoryIds: editTodo.categories.map((c) => c.category.id),
-          parentId: editTodo.parentId,
+          listId: editTodo.list?.id ?? null,
         })
       } else {
         setFormData({
@@ -102,55 +85,30 @@ export function TodoDialog({
           description: '',
           priority: DEFAULT_PRIORITY,
           dueDate: null,
-          categoryIds: [],
-          parentId: parentId || null,
+          listId: null,
         })
       }
     }
-  }, [open, editTodo, parentId])
+  }, [open, editTodo])
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     onSubmit(formData)
   }
 
-  const toggleCategory = (categoryId: string) => {
-    setFormData((prev) => ({
-      ...prev,
-      categoryIds: prev.categoryIds.includes(categoryId)
-        ? prev.categoryIds.filter((id) => id !== categoryId)
-        : [...prev.categoryIds, categoryId],
-    }))
-  }
-
-  const selectedCategories = categories.filter((c) =>
-    formData.categoryIds.includes(c.id),
-  )
-
-  // Filter out the current todo and its subtasks if editing (can't be its own parent)
-  const availableParentTodos = editTodo
-    ? todos.filter((t) => t.id !== editTodo.id && t.parentId !== editTodo.id)
-    : todos
-
-  const isSubtask = !!parentId || !!formData.parentId
+  const selectedList = categories.find((c) => c.id === formData.listId) || null
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
-            {editTodo
-              ? 'Edit Todo'
-              : isSubtask
-                ? 'Create Subtask'
-                : 'Create New Todo'}
+            {editTodo ? 'Edit Todo' : 'Create New Todo'}
           </DialogTitle>
           <DialogDescription>
             {editTodo
               ? 'Update your todo details below.'
-              : isSubtask
-                ? 'Add a subtask to break down your work.'
-                : 'Add a new todo to your list.'}
+              : 'Add a new todo to your list.'}
           </DialogDescription>
         </DialogHeader>
 
@@ -242,101 +200,44 @@ export function TodoDialog({
 
           {/* Categories */}
           <div className="space-y-2">
-            <Label>Categories</Label>
-            <Popover open={categoryOpen} onOpenChange={setCategoryOpen}>
-              <PopoverTrigger asChild>
-                <Button
-                  variant="outline"
-                  role="combobox"
-                  aria-expanded={categoryOpen}
-                  className="w-full justify-between"
-                >
-                  <span className="truncate">
-                    {selectedCategories.length > 0
-                      ? `${selectedCategories.length} selected`
-                      : 'Select categories...'}
-                  </span>
-                  <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-full p-0" align="start">
-                <Command>
-                  <CommandInput placeholder="Search categories..." />
-                  <CommandList>
-                    <CommandEmpty>No categories found.</CommandEmpty>
-                    <CommandGroup>
-                      {categories.map((category) => (
-                        <CommandItem
-                          key={category.id}
-                          onSelect={() => toggleCategory(category.id)}
-                        >
-                          <Check
-                            className={cn(
-                              'mr-2 h-4 w-4',
-                              formData.categoryIds.includes(category.id)
-                                ? 'opacity-100'
-                                : 'opacity-0',
-                            )}
-                          />
-                          <span
-                            className="w-3 h-3 rounded-full mr-2"
-                            style={{
-                              backgroundColor: category.color || '#94a3b8',
-                            }}
-                          />
-                          {category.name}
-                        </CommandItem>
-                      ))}
-                    </CommandGroup>
-                  </CommandList>
-                </Command>
-              </PopoverContent>
-            </Popover>
-            {selectedCategories.length > 0 && (
-              <div className="flex flex-wrap gap-2 mt-2">
-                {selectedCategories.map((category) => (
-                  <Badge
-                    key={category.id}
-                    variant="outline"
-                    style={{
-                      borderColor: category.color || undefined,
-                      color: category.color || undefined,
-                    }}
-                  >
+            <Label>List</Label>
+            <Select
+              value={formData.listId || '__none__'}
+              onValueChange={(value) =>
+                setFormData((prev) => ({
+                  ...prev,
+                  listId: value === '__none__' ? null : value,
+                }))
+              }
+            >
+              <SelectTrigger id="list">
+                <SelectValue placeholder="None (no list)" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none__">None (no list)</SelectItem>
+                {categories.map((category) => (
+                  <SelectItem key={category.id} value={category.id}>
+                    <span className="w-3 h-3 rounded-full mr-2 inline-block" style={{ backgroundColor: category.color || '#94a3b8' }} />
                     {category.name}
-                  </Badge>
+                  </SelectItem>
                 ))}
+              </SelectContent>
+            </Select>
+            {selectedList && (
+              <div className="flex flex-wrap gap-2 mt-2">
+                <Badge
+                  key={selectedList.id}
+                  variant="outline"
+                  style={{
+                    borderColor: selectedList.color || undefined,
+                    color: selectedList.color || undefined,
+                  }}
+                >
+                  {selectedList.name}
+                </Badge>
               </div>
             )}
           </div>
-
-          {/* Parent Todo (for creating subtask manually or editing) */}
-          {!parentId && !isSubtask && availableParentTodos.length > 0 && (
-            <div className="space-y-2">
-              <Label htmlFor="parent">Parent Todo (Optional)</Label>
-              <Select
-                value={formData.parentId || '__none__'}
-                onValueChange={(value) =>
-                  setFormData((prev) => ({
-                    ...prev,
-                    parentId: value === '__none__' ? null : value,
-                  }))
-                }
-              >
-                <SelectTrigger id="parent">
-                  <SelectValue placeholder="None (top-level todo)" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__">None (top-level todo)</SelectItem>
-                  {availableParentTodos.map((todo) => (
-                    <SelectItem key={todo.id} value={todo.id}>
-                      {todo.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
 
           <DialogFooter>
             <Button

@@ -1,6 +1,6 @@
 import { createSelectSchema } from 'drizzle-zod'
 import { z } from 'zod'
-import { todos, categories, todoCategories, priorityEnum } from '../db/schema'
+import { todos, lists, subtasks, priorityEnum } from '../db/schema'
 import { asc } from 'drizzle-orm'
 
 // =============================================================================
@@ -13,32 +13,27 @@ export type Priority = z.infer<typeof prioritySchema>
 
 // Table schemas - select schemas are the source of truth for data shapes
 export const todoSchema = createSelectSchema(todos)
-export const categorySchema = createSelectSchema(categories)
-export const todoCategorySchema = createSelectSchema(todoCategories)
+export const listSchema = createSelectSchema(lists)
+export const subtaskSchema = createSelectSchema(subtasks)
 
 // =============================================================================
 // COMPOSED SCHEMAS - Relations built on top of base schemas
 // =============================================================================
 
 // TodoCategory with nested category
-export const todoCategoryWithRelationSchema = todoCategorySchema.extend({
-  category: categorySchema,
-})
-
-// Subtask schema (todo with categories, no further nesting)
-const subtaskSchema = todoSchema.extend({
-  categories: z.array(todoCategoryWithRelationSchema),
+// Previously there was a join table relation; now todos reference a single list.
+export const todoListWithRelationSchema = todoSchema.extend({
+  list: listSchema.nullable().optional(),
 })
 
 // Full TodoWithRelations schema
 export const todoWithRelationsSchema = todoSchema.extend({
-  categories: z.array(todoCategoryWithRelationSchema),
+  list: listSchema.nullable().optional(),
   subtasks: z.array(subtaskSchema).optional(),
-  parent: todoSchema.nullable().optional(),
 })
 
 // Category with todo count for UI
-export const categoryWithCountSchema = categorySchema.extend({
+export const listWithCountSchema = listSchema.extend({
   todoCount: z.number(),
 })
 
@@ -47,13 +42,11 @@ export const categoryWithCountSchema = categorySchema.extend({
 // =============================================================================
 
 export type Todo = z.infer<typeof todoSchema>
-export type Category = z.infer<typeof categorySchema>
-export type TodoCategory = z.infer<typeof todoCategorySchema>
-export type TodoCategoryWithRelation = z.infer<
-  typeof todoCategoryWithRelationSchema
->
+export type List = z.infer<typeof listSchema>
+export type Subtask = z.infer<typeof subtaskSchema>
+export type TodoListWithRelation = z.infer<typeof todoListWithRelationSchema>
 export type TodoWithRelations = z.infer<typeof todoWithRelationsSchema>
-export type CategoryWithCount = z.infer<typeof categoryWithCountSchema>
+export type ListWithCount = z.infer<typeof listWithCountSchema>
 
 // =============================================================================
 // SHARED QUERY CONFIGURATION - Used by server functions
@@ -62,22 +55,12 @@ export type CategoryWithCount = z.infer<typeof categoryWithCountSchema>
 // Drizzle relational query config for fetching todos with all relations
 // This is the single source of truth for how we fetch todos with their relationships
 export const todoWithRelationsQueryConfig = {
-  categories: {
-    with: {
-      category: true,
-    },
-  },
+  // Todos now include a single `list` relation
+  list: true,
+  // Subtasks are now simple checklist items, ordered by their orderIndex
   subtasks: {
-    with: {
-      categories: {
-        with: {
-          category: true,
-        },
-      },
-    },
-    orderBy: [asc(todos.createdAt)],
+    orderBy: [asc(subtasks.orderIndex), asc(subtasks.createdAt), asc(subtasks.id)],
   },
-  parent: true,
 } as const
 
 // =============================================================================
@@ -92,8 +75,22 @@ export const createTodoSchema = z.object({
   description: z.string().max(1000).default(''),
   priority: prioritySchema.default('low'),
   dueDate: z.date().optional().nullable(),
-  parentId: z.uuid().optional().nullable(),
-  categoryIds: z.array(z.uuid()).default([]),
+  listId: z.uuid().optional().nullable(),
+})
+
+// Create subtask input schema
+export const createSubtaskSchema = z.object({
+  name: z.string().min(1, 'Name is required').max(255),
+  todoId: z.uuid(),
+  orderIndex: z.string().optional(),
+})
+
+// Update subtask input schema
+export const updateSubtaskSchema = z.object({
+  id: z.uuid(),
+  name: z.string().min(1).max(255).optional(),
+  isComplete: z.boolean().optional(),
+  orderIndex: z.string().optional(),
 })
 
 // Update todo input schema
@@ -104,11 +101,11 @@ export const updateTodoSchema = z.object({
   priority: prioritySchema.optional(),
   dueDate: z.date().optional().nullable(),
   isComplete: z.boolean().optional(),
-  categoryIds: z.array(z.uuid()).optional(),
+  listId: z.uuid().optional().nullable(),
 })
 
 // Create category input schema
-export const createCategorySchema = z.object({
+export const createListSchema = z.object({
   name: z.string().min(1, 'Name is required').max(100),
   color: z
     .string()
@@ -117,8 +114,8 @@ export const createCategorySchema = z.object({
     .default(null),
 })
 
-// Update category input schema
-export const updateCategorySchema = z.object({
+// Update list input schema
+export const updateListSchema = z.object({
   id: z.uuid(),
   name: z.string().min(1).max(100).optional(),
   color: z
@@ -138,18 +135,12 @@ export const updateCategorySchema = z.object({
 const PRIORITY_VALUES = ['low', 'medium', 'high', 'urgent', 'critical'] as const
 
 // Schema for AI-generated subtasks
-// Note: Using .nullish() to accept missing, null, or undefined values
+// Note: Subtasks are simple checklist items with just a name
 export const aiSubtaskSchema = z.object({
   name: z
     .string()
     .describe(
       'A concise, actionable subtask name. Start with a verb when appropriate (e.g., "Buy milk", "Call plumber").',
-    ),
-  description: z
-    .string()
-    .nullish()
-    .describe(
-      'Detailed description or context for this subtask. Can be omitted, null, or undefined if the subtask name is self-explanatory.',
     ),
 })
 
@@ -178,10 +169,10 @@ export const aiGeneratedTodoSchema = z.object({
     .describe(
       'Due date in ISO 8601 format (YYYY-MM-DD) if the user mentions a deadline or timeframe. Parse relative dates like "tomorrow", "next Monday", "in 3 days", "end of week". Can be omitted, null, or undefined if no deadline is mentioned or implied.',
     ),
-  suggestedCategories: z
+  suggestedLists: z
     .array(z.string())
     .describe(
-      'Array of category names that best match this task from the available categories list provided in the system prompt. Return an empty array if none of the available categories are a good match. Do not invent new category names.',
+      'Array of list names that best match this task from the available lists provided in the system prompt. Return an empty array if none of the available lists are a good match. Do not invent new list names.',
     ),
   subtasks: z
     .array(aiSubtaskSchema)
@@ -193,7 +184,7 @@ export const aiGeneratedTodoSchema = z.object({
 // Input schema for AI todo generation
 export const generateTodoInputSchema = z.object({
   prompt: z.string().min(1).max(2000),
-  categories: z.array(
+  lists: z.array(
     z.object({
       id: z.uuid(),
       name: z.string(),
@@ -207,8 +198,10 @@ export const generateTodoInputSchema = z.object({
 
 export type CreateTodoInput = z.infer<typeof createTodoSchema>
 export type UpdateTodoInput = z.infer<typeof updateTodoSchema>
-export type CreateCategoryInput = z.infer<typeof createCategorySchema>
-export type UpdateCategoryInput = z.infer<typeof updateCategorySchema>
+export type CreateSubtaskInput = z.infer<typeof createSubtaskSchema>
+export type UpdateSubtaskInput = z.infer<typeof updateSubtaskSchema>
+export type CreateListInput = z.infer<typeof createListSchema>
+export type UpdateListInput = z.infer<typeof updateListSchema>
 export type AIGeneratedTodo = z.infer<typeof aiGeneratedTodoSchema>
 export type AISubtask = z.infer<typeof aiSubtaskSchema>
 export type GenerateTodoInput = z.infer<typeof generateTodoInputSchema>

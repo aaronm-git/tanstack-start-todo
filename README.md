@@ -2,7 +2,7 @@
 
 Toodyloo is a modern, full-stack smart to-do app built with **TypeScript**, **React**, and **TanStack Start**. It leverages **Postgres** as its database, accesses data and handles migrations using **Drizzle**, and integrates **Sentry** for automatic error tracking and performance instrumentation. The app uses **AI** for intelligent task suggestions, completion assistance, and enhanced UX, plus **Resend** for streamlined email delivery.
 
-It’s intentionally built like a “real” app: categories, subtasks, filters, validation, and an accessible UI (shadcn/ui + Radix).
+It’s intentionally built like a “real” app: lists, subtasks, filters, validation, and an accessible UI (shadcn/ui + Radix).
 
 ---
 

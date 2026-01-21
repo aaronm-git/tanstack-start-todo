@@ -7,35 +7,36 @@ import {
   Plus,
   MoreVertical,
 } from 'lucide-react'
-import { Button } from '../ui/button'
-import { Badge } from '../ui/badge'
-import { Checkbox } from '../ui/checkbox'
-import { Separator } from '../ui/separator'
+import { Button } from './ui/button'
+import { Badge } from './ui/badge'
+import { Checkbox } from './ui/checkbox'
+import { Separator } from './ui/separator'
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from '../ui/dropdown-menu'
-import { cn } from '../../lib/utils'
-import { getPriorityColor, getPriorityLabel, isOverdue } from '../../lib/tasks'
-import type { TodoWithRelations } from '../../lib/tasks'
+} from './ui/dropdown-menu'
+import { cn } from '../lib/utils'
+import { getPriorityColor, getPriorityLabel, isOverdue } from '../lib/tasks'
+import type { TodoWithRelations, Subtask } from '../lib/tasks'
 
-interface TodoDetailPanelProps {
+interface DetailsProps {
   todo: TodoWithRelations | null
   onClose: () => void
   onToggleComplete: (id: string) => void
   onEdit: (todo: TodoWithRelations) => void
   onDelete: (id: string) => void
-  onAddSubtask: (parentId: string) => void
+  onAddSubtask: (todoId: string) => void
   onCategoryClick?: (categoryId: string) => void
-  onEditSubtask?: (subtask: TodoWithRelations) => void
+  onEditSubtask?: (subtask: Subtask) => void
   onDeleteSubtask?: (id: string) => void
+  onToggleSubtaskComplete?: (id: string) => void
   className?: string
   hideCloseButton?: boolean
 }
 
-export function TodoDetailPanel({
+export function Details({
   todo,
   onClose,
   onToggleComplete,
@@ -45,9 +46,10 @@ export function TodoDetailPanel({
   onCategoryClick,
   onEditSubtask,
   onDeleteSubtask,
+  onToggleSubtaskComplete,
   className,
   hideCloseButton = false,
-}: TodoDetailPanelProps) {
+}: DetailsProps) {
   if (!todo) {
     return (
       <div className={cn('w-full lg:w-96 bg-muted/10 flex items-center justify-center', className)}>
@@ -62,7 +64,7 @@ export function TodoDetailPanel({
   const completedSubtasks = subtasks.filter((st) => st.isComplete).length
 
   return (
-    <div className={cn('w-full lg:w-96 bg-background', className)}>
+    <div className={cn('w-full lg:w-96 bg-background pb-12', className)}>
       {/* Header */}
       <div className="p-4 border-b flex items-start justify-between gap-2 sticky top-0 bg-background z-10">
         <div className="flex-1 min-w-0">
@@ -96,7 +98,7 @@ export function TodoDetailPanel({
         )}
       </div>
 
-      <div className="p-4 space-y-6">
+      <div className="p-4 space-y-6 pb-18">
           {/* Description */}
           {todo.description && (
             <div>
@@ -114,7 +116,7 @@ export function TodoDetailPanel({
           {/* Subtasks Section */}
           <div>
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-semibold">Steps</h3>
+              <h3 className="text-sm font-semibold">Subtasks</h3>
               <Button
                 variant="ghost"
                 size="sm"
@@ -122,13 +124,13 @@ export function TodoDetailPanel({
                 className="h-7 text-xs"
               >
                 <Plus className="h-3 w-3 mr-1" />
-                Next step
+                Add subtask
               </Button>
             </div>
 
             {subtasks.length === 0 ? (
               <p className="text-sm text-muted-foreground">
-                No steps yet. Add your first step to get started.
+                No subtasks yet. Add your first subtask to get started.
               </p>
             ) : (
               <div className="space-y-2">
@@ -139,87 +141,57 @@ export function TodoDetailPanel({
                   >
                     <Checkbox
                       checked={subtask.isComplete}
-                      onCheckedChange={() => onToggleComplete(subtask.id)}
+                      onCheckedChange={() => 
+                        onToggleSubtaskComplete
+                          ? onToggleSubtaskComplete(subtask.id)
+                          : onToggleComplete(subtask.id)
+                      }
                       className="mt-0.5"
                     />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span
-                          className={cn(
-                            'text-sm flex-1',
-                            subtask.isComplete &&
-                              'line-through text-muted-foreground',
-                          )}
-                        >
-                          {subtask.name}
-                        </span>
-                        <div className="flex items-center gap-2">
-                          {subtask.priority !== 'low' && (
-                            <Badge
-                              variant="secondary"
-                              className={cn(
-                                'text-xs',
-                                getPriorityColor(subtask.priority),
-                              )}
-                            >
-                              {getPriorityLabel(subtask.priority)}
-                            </Badge>
-                          )}
-                          {isOverdue(subtask.dueDate) && (
-                            <Badge variant="destructive" className="text-xs">
-                              Overdue
-                            </Badge>
-                          )}
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-6 w-6"
-                              >
-                                <MoreVertical className="h-3 w-3" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem
-                                onClick={() => {
-                                  if (onEditSubtask) {
-                                    onEditSubtask(subtask)
-                                  } else {
-                                    onEdit(subtask)
-                                  }
-                                }}
-                              >
-                                <Edit className="h-3 w-3 mr-2" />
-                                Edit
-                              </DropdownMenuItem>
-                              <DropdownMenuItem
-                                variant="destructive"
-                                onClick={() => {
-                                  if (onDeleteSubtask) {
-                                    onDeleteSubtask(subtask.id)
-                                  } else {
-                                    onDelete(subtask.id)
-                                  }
-                                }}
-                              >
-                                <Trash2 className="h-3 w-3 mr-2" />
-                                Delete
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </div>
-                      </div>
-                      {subtask.description && (
-                        <p
-                          className={cn(
-                            'text-xs text-muted-foreground',
-                            subtask.isComplete && 'line-through',
-                          )}
-                        >
-                          {subtask.description}
-                        </p>
-                      )}
+                    <div className="flex-1 min-w-0 flex items-center gap-2">
+                      <span
+                        className={cn(
+                          'text-sm flex-1',
+                          subtask.isComplete &&
+                            'line-through text-muted-foreground',
+                        )}
+                      >
+                        {subtask.name}
+                      </span>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6"
+                          >
+                            <MoreVertical className="h-3 w-3" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem
+                            onClick={() => {
+                              if (onEditSubtask) {
+                                onEditSubtask(subtask)
+                              }
+                            }}
+                          >
+                            <Edit className="h-3 w-3 mr-2" />
+                            Edit
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            variant="destructive"
+                            onClick={() => {
+                              if (onDeleteSubtask) {
+                                onDeleteSubtask(subtask.id)
+                              }
+                            }}
+                          >
+                            <Trash2 className="h-3 w-3 mr-2" />
+                            Delete
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </div>
                   </div>
                 ))}
@@ -234,25 +206,22 @@ export function TodoDetailPanel({
 
           <Separator />
 
-          {/* Categories */}
-          {todo.categories.length > 0 && (
+          {/* List */}
+          {todo.list && (
             <div>
-              <h3 className="text-sm font-semibold mb-2">Categories</h3>
+              <h3 className="text-sm font-semibold mb-2">List</h3>
               <div className="flex flex-wrap gap-2">
-                {todo.categories.map(({ category }) => (
-                  <Badge
-                    key={category.id}
-                    variant="outline"
-                    className="cursor-pointer hover:bg-accent"
-                    style={{
-                      borderColor: category.color || undefined,
-                      color: category.color || undefined,
-                    }}
-                    onClick={() => onCategoryClick?.(category.id)}
-                  >
-                    {category.name}
-                  </Badge>
-                ))}
+                <Badge
+                  variant="outline"
+                  className="cursor-pointer hover:bg-accent"
+                  style={{
+                    borderColor: todo.list.color || undefined,
+                    color: todo.list.color || undefined,
+                  }}
+                  onClick={() => onCategoryClick?.(todo.list!.id)}
+                >
+                  {todo.list.name}
+                </Badge>
               </div>
             </div>
           )}

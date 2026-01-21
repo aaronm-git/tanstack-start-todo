@@ -20,7 +20,12 @@ High-level overview of the app’s architecture and where to make changes.
 - Router setup + Sentry init: `src/router.tsx`
 - UI components: `src/components/`
 - Server functions: `src/lib/server/` (TanStack Start `createServerFn`)
+  - `todos.ts` - Todo CRUD operations
+  - `subtasks.ts` - Subtask CRUD operations
+  - `categories.ts` - List management
+  - `ai.ts` - AI-powered todo generation
 - Database: `src/db/` (`src/db/schema.ts` and `src/db/index.ts`)
+  - Tables: `todos`, `subtasks`, `lists`, `reminders`
 - Auth: `src/lib/auth.ts` + `src/routes/api/auth/$.tsx`
-- AI todo: `src/lib/server/ai.ts`
+- Types: `src/lib/tasks.ts` - Zod schemas and TypeScript types
 

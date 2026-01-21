@@ -3,7 +3,7 @@ import { Badge } from '../ui/badge'
 import { Button } from '../ui/button'
 import { cn } from '../../lib/utils'
 
-interface CategoryBadgeProps {
+interface ListBadgeProps {
   name: string
   color: string | null
   onClick?: () => void
@@ -12,14 +12,14 @@ interface CategoryBadgeProps {
   className?: string
 }
 
-export function CategoryBadge({
+export function ListBadge({
   name,
   color,
   onClick,
   onRemove,
   variant = 'outline',
   className,
-}: CategoryBadgeProps) {
+}: ListBadgeProps) {
   return (
     <Badge
       variant={variant}
@@ -35,7 +35,7 @@ export function CategoryBadge({
       onClick={onClick}
     >
       <span
-        className="w-2 h-2 rounded-full flex-shrink-0"
+        className="w-2 h-2 rounded-full shrink-0"
         style={{
           backgroundColor: color || '#94a3b8',
         }}

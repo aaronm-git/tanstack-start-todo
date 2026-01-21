@@ -1,14 +1,14 @@
 import { Plus, Edit, Trash2, Folder, MoreVertical } from 'lucide-react'
-import { Button } from '../ui/button'
-import { Badge } from '../ui/badge'
-import { Separator } from '../ui/separator'
+import { Button } from './ui/button'
+import { Badge } from './ui/badge'
+import { Separator } from './ui/separator'
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
   DropdownMenuSeparator,
-} from '../ui/dropdown-menu'
+} from './ui/dropdown-menu'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -18,23 +18,23 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from '../ui/alert-dialog'
-import { cn } from '../../lib/utils'
-import type { CategoryWithCount } from '../../lib/tasks'
+} from './ui/alert-dialog'
+import { cn } from '../lib/utils'
+import type { ListWithCount } from '../lib/tasks'
 import { useState } from 'react'
 
-interface CategorySidebarProps {
-  categories: CategoryWithCount[]
+interface SidebarProps {
+  categories: ListWithCount[]
   selectedCategoryId: string | null
   onCategorySelect: (categoryId: string | null) => void
   onCreateCategory: () => void
-  onEditCategory: (category: CategoryWithCount) => void
+  onEditCategory: (category: ListWithCount) => void
   onDeleteCategory: (categoryId: string) => void
   totalTodos: number
   isLoading?: boolean
 }
 
-export function CategorySidebar({
+export function Sidebar({
   categories,
   selectedCategoryId,
   onCategorySelect,
@@ -43,13 +43,13 @@ export function CategorySidebar({
   onDeleteCategory,
   totalTodos,
   isLoading,
-}: CategorySidebarProps) {
+}: SidebarProps) {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
-  const [categoryToDelete, setCategoryToDelete] = useState<CategoryWithCount | null>(
+  const [categoryToDelete, setCategoryToDelete] = useState<ListWithCount | null>(
     null,
   )
 
-  const handleDeleteClick = (category: CategoryWithCount) => {
+  const handleDeleteClick = (category: ListWithCount) => {
     setCategoryToDelete(category)
     setDeleteDialogOpen(true)
   }
@@ -64,11 +64,11 @@ export function CategorySidebar({
 
   return (
     <>
-      <div className="flex flex-col">
+      <div className="flex flex-col pb-12">
         {/* Header */}
         <div className="p-4 border-b sticky top-0 bg-background z-10">
           <div className="flex items-center justify-between mb-2">
-            <h2 className="text-lg font-semibold">Categories</h2>
+            <h2 className="text-lg font-semibold">Lists</h2>
             <Button 
               size="icon" 
               variant="ghost" 
@@ -105,16 +105,16 @@ export function CategorySidebar({
 
         <Separator />
 
-        {/* Categories List */}
+        {/* List */}
         <div className="px-2">
           {isLoading ? (
             <div className="p-4 text-center text-sm text-muted-foreground">
-              Loading categories...
+              Loading lists...
             </div>
           ) : categories.length === 0 ? (
             <div className="p-4 text-center">
               <p className="text-sm text-muted-foreground mb-2">
-                No categories yet
+                No lists yet
               </p>
               <Button
                 size="sm"
@@ -143,7 +143,7 @@ export function CategorySidebar({
                     className="flex items-center gap-2 flex-1 text-left min-w-0"
                   >
                     <span
-                      className="w-3 h-3 rounded-full flex-shrink-0"
+                      className="w-3 h-3 rounded-full shrink-0"
                       style={{
                         backgroundColor: category.color || '#94a3b8',
                       }}
@@ -193,10 +193,10 @@ export function CategorySidebar({
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete Category</AlertDialogTitle>
+            <AlertDialogTitle>Delete List</AlertDialogTitle>
             <AlertDialogDescription>
               Are you sure you want to delete "{categoryToDelete?.name}"? This
-              will remove the category from all todos, but won't delete the todos
+              will set the list to null on any todos that belong to it, but won't delete the todos
               themselves.
             </AlertDialogDescription>
           </AlertDialogHeader>

@@ -1,6 +1,6 @@
 # AI Todo Creation (OpenAI)
 
-AI-powered task creation feature that uses OpenAI's GPT-4.1-nano model via TanStack AI to parse natural language prompts and automatically generate structured todos with subtasks, priorities, due dates, and category suggestions.
+AI-powered task creation feature that uses OpenAI's GPT-4.1-nano model via TanStack AI to parse natural language prompts and automatically generate structured todos with subtasks, priorities, due dates, and list suggestions.
 
 ## Where to look in the code
 
@@ -26,7 +26,7 @@ OpenAI API (gpt-4.1-nano) with Structured Output
     ↓
 Automatic Zod Schema Validation
     ↓
-Database Insert (todos + subtasks + categories)
+Database Insert (todos + subtasks)
     ↓
 Return TodoWithRelations
 ```
@@ -35,22 +35,22 @@ Return TodoWithRelations
 
 #### Server Function (`src/lib/server/ai.ts`)
 
-- **Input**: `{ prompt: string, categories: Array<{id, name}> }`
+- **Input**: `{ prompt: string, lists: Array<{id, name}> }`
 - **Output**: `TodoWithRelations` (validated via Zod schema)
 - **Implementation**: Uses TanStack AI's `chat()` function with `outputSchema` for structured output
 - **Process**:
-  1. Builds system prompt with current date and available categories
+  1. Builds system prompt with current date and available lists
   2. Calls TanStack AI's `chat()` with:
      - `adapter`: `openaiText('gpt-4.1-nano')`
      - `systemPrompts`: Array with instructions
      - `messages`: User's prompt
      - `outputSchema`: `aiGeneratedTodoSchema` (Zod 4 schema)
   3. TanStack AI automatically validates response against Zod schema
-  4. Matches suggested categories to actual category IDs
+  4. Matches suggested lists to actual list IDs
   5. Parses and validates due date
   6. Creates main todo in database
-  7. Creates subtasks (if any) with inherited priority/due date
-  8. Assigns matched categories
+  7. Creates subtasks (if any) - simple checklist items with just a name
+  8. Assigns matched list (single list per todo)
   9. Returns complete todo with relations
 
 #### AI Schema (`aiGeneratedTodoSchema`)
@@ -60,13 +60,13 @@ Defines the structured output format using Zod 4:
 - `description`: Detailed description - Uses `.nullish()` to accept null, undefined, or omitted
 - `priority`: Enum ['low', 'medium', 'high', 'urgent', 'critical'] with detailed descriptions
 - `dueDate`: ISO 8601 date string - Uses `.nullish()` to accept null, undefined, or omitted
-- `suggestedCategories`: Array of category names to match from available categories
-- `subtasks`: Array of subtask objects (name, description) - Empty array if no breakdown needed
+- `suggestedLists`: Array of list names to match from available lists
+- `subtasks`: Array of simple subtask objects (just a name) - Empty array if no breakdown needed
 
 **Key improvements**:
 - Uses `.nullish()` instead of `.nullable()` or `.optional()` for better OpenAI compatibility
 - Each field has detailed `.describe()` strings with examples to guide the AI
-- Subtask schema also uses `.nullish()` for flexible description handling
+- Subtasks are kept simple (Wunderlist-style) - just a name, no extra properties
 
 #### UI Component (`src/components/todos/ai-todo-dialog.tsx`)
 
@@ -96,16 +96,16 @@ The system prompt instructs the AI to:
 2. Add helpful descriptions when context is implied
 3. Infer priority from urgency indicators
 4. Parse relative dates (tomorrow, next Monday, etc.) to ISO 8601
-5. Match tasks to available categories
+5. Match tasks to available lists
 6. Create subtasks when multiple items are mentioned (e.g., "Buy groceries - milk, eggs, bread")
 
 ## Subtask Detection
 
 The AI automatically detects when a prompt contains multiple items and creates subtasks:
 - **Example**: "Buy groceries tomorrow - milk, eggs, and bread"
-  - Main task: "Buy groceries"
-  - Subtasks: ["milk", "eggs", "bread"]
-- Subtasks inherit priority and due date from parent task
+  - Main task: "Buy groceries" (with priority and due date)
+  - Subtasks: Simple checklist items with just names: "Buy milk", "Buy eggs", "Buy bread"
+- Subtasks are simple checklist items (Wunderlist-style) - they only have a name and completion status
 
 ## Type Safety
 

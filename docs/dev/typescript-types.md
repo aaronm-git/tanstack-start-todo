@@ -52,13 +52,12 @@ import { createSelectSchema } from 'drizzle-zod'
 
 // Base schemas - auto-generated from Drizzle tables
 export const todoSchema = createSelectSchema(todos)
-export const categorySchema = createSelectSchema(categories)
+export const listSchema = createSelectSchema(lists)
 
 // Composed schemas - built on top of base schemas
 export const todoWithRelationsSchema = todoSchema.extend({
-  categories: z.array(todoCategoryWithRelationSchema),
+  list: listSchema.nullable().optional(),
   subtasks: z.array(subtaskSchema).optional(),
-  parent: todoSchema.nullable().optional(),
 })
 ```
 
@@ -68,7 +67,7 @@ export const todoWithRelationsSchema = todoSchema.extend({
 // Types inferred from Zod schemas
 export type Todo = z.infer<typeof todoSchema>
 export type TodoWithRelations = z.infer<typeof todoWithRelationsSchema>
-export type CategoryWithCount = z.infer<typeof categoryWithCountSchema>
+export type ListWithCount = z.infer<typeof listWithCountSchema>
 ```
 
 ## Key Types
@@ -76,20 +75,22 @@ export type CategoryWithCount = z.infer<typeof categoryWithCountSchema>
 ### Core Entity Types
 
 - **`Todo`** - Base todo entity (from `todoSchema`)
-- **`Category`** - Category entity (from `categorySchema`)
-- **`TodoCategory`** - Join table entity (from `todoCategorySchema`)
+- **`List`** - List entity (from `listSchema`)
+- **`Subtask`** - Simple subtask entity (from `subtaskSchema`) - name and completion status only
 
 ### Relation Types
 
-- **`TodoWithRelations`** - Todo with categories, subtasks, and parent
-- **`CategoryWithCount`** - Category with todo count for UI
+- **`TodoWithRelations`** - Todo with list and subtasks
+- **`ListWithCount`** - List with todo count for UI
 
 ### Input Types
 
 - **`CreateTodoInput`** - Input for creating todos
 - **`UpdateTodoInput`** - Input for updating todos
-- **`CreateCategoryInput`** - Input for creating categories
-- **`UpdateCategoryInput`** - Input for updating categories
+- **`CreateSubtaskInput`** - Input for creating subtasks (just a name and todoId)
+- **`UpdateSubtaskInput`** - Input for updating subtasks
+- **`CreateListInput`** - Input for creating lists
+- **`UpdateListInput`** - Input for updating lists
 
 ### Enum Types
 
@@ -102,7 +103,7 @@ export type CategoryWithCount = z.infer<typeof categoryWithCountSchema>
 
 ```typescript
 // ✅ Good - Single source of truth
-import type { TodoWithRelations, CategoryWithCount } from '../../lib/tasks'
+import type { TodoWithRelations, ListWithCount } from '../../lib/tasks'
 
 // ❌ Bad - Don't create duplicate type definitions
 type TodoWithRelations = { ... } // Don't do this

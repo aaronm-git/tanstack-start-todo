@@ -141,10 +141,9 @@ priority: createSelectSchema(priorityEnum)
 ### 4. Keep Nested Objects Simple
 
 ```typescript
-// ✅ GOOD - Simple nested object
+// ✅ GOOD - Simple nested object (Wunderlist-style subtasks)
 subtasks: z.array(z.object({
-  name: z.string().describe('Subtask name'),
-  description: z.string().nullish().describe('Optional description')
+  name: z.string().describe('Subtask name - simple checklist item'),
 }))
 
 // ❌ BAD - Complex nested structure with transforms
@@ -189,9 +188,9 @@ All tests passed without validation errors.
 ## Future Improvements
 
 1. **Streaming Support**: Implement streaming responses using TanStack AI's streaming capabilities
-2. **Tool Support**: Add function calling tools for dynamic category creation
+2. **Tool Support**: Add function calling tools for dynamic list creation
 3. **Multi-model Support**: Test with additional models/providers supported by TanStack AI
-4. **Prompt Engineering**: Refine system prompts for better categorization and prioritization
+4. **Prompt Engineering**: Refine system prompts for better list matching and prioritization
 5. **Error Recovery**: Implement fallback strategies for partial AI responses
 
 ## References

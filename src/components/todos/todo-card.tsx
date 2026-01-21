@@ -32,7 +32,8 @@ interface TodoCardProps {
   onToggleComplete: (id: string) => void
   onEdit: (todo: TodoWithRelations) => void
   onDelete: (id: string) => void
-  onAddSubtask: (parentId: string) => void
+  onAddSubtask: (todoId: string) => void
+  onToggleSubtaskComplete?: (id: string) => void
   onCategoryClick?: (categoryId: string) => void
   level?: number
 }
@@ -43,6 +44,7 @@ export function TodoCard({
   onEdit,
   onDelete,
   onAddSubtask,
+  onToggleSubtaskComplete,
   onCategoryClick,
   level = 0,
 }: TodoCardProps) {
@@ -94,23 +96,23 @@ export function TodoCard({
               </p>
             )}
 
-            {/* Categories and Due Date */}
+            {/* List and Due Date */}
             <div className="flex flex-wrap items-center gap-2 mb-2">
-              {/* Categories */}
-              {todo.categories.map(({ category }) => (
+              {/* List */}
+              {todo.list && (
                 <Badge
-                  key={category.id}
+                  key={todo.list.id}
                   variant="outline"
                   className="cursor-pointer hover:bg-accent"
                   style={{
-                    borderColor: category.color || undefined,
-                    color: category.color || undefined,
+                    borderColor: todo.list.color || undefined,
+                    color: todo.list.color || undefined,
                   }}
-                  onClick={() => onCategoryClick?.(category.id)}
+                  onClick={() => onCategoryClick?.(todo.list!.id)}
                 >
-                  {category.name}
+                  {todo.list.name}
                 </Badge>
-              ))}
+              )}
 
               {/* Due Date */}
               {todo.dueDate && (
@@ -134,16 +136,27 @@ export function TodoCard({
                   <AccordionContent className="pb-0 pt-2">
                     <div className="space-y-2">
                       {(todo.subtasks ?? []).map((subtask) => (
-                        <TodoCard
+                        <div
                           key={subtask.id}
-                          todo={subtask}
-                          onToggleComplete={onToggleComplete}
-                          onEdit={onEdit}
-                          onDelete={onDelete}
-                          onAddSubtask={onAddSubtask}
-                          onCategoryClick={onCategoryClick}
-                          level={level + 1}
-                        />
+                          className="flex items-center gap-2 p-2 rounded hover:bg-accent/50"
+                        >
+                          <Checkbox
+                            checked={subtask.isComplete}
+                            onCheckedChange={() => 
+                              onToggleSubtaskComplete
+                                ? onToggleSubtaskComplete(subtask.id)
+                                : onToggleComplete(subtask.id)
+                            }
+                          />
+                          <span
+                            className={cn(
+                              'text-sm flex-1',
+                              subtask.isComplete && 'line-through text-muted-foreground'
+                            )}
+                          >
+                            {subtask.name}
+                          </span>
+                        </div>
                       ))}
                     </div>
                   </AccordionContent>

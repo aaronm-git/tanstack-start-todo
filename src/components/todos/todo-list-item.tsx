@@ -55,54 +55,48 @@ export function TodoListItem({
         className="shrink-0"
       />
 
-      {/* Content */}
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 mb-1">
-          <h3
-            className={cn(
-              'text-sm font-medium flex-1 truncate',
-              todo.isComplete && 'line-through text-muted-foreground',
-            )}
+      {/* Title */}
+      <h3
+        className={cn(
+          'text-sm font-medium flex-1 min-w-0 truncate',
+          todo.isComplete && 'line-through text-muted-foreground',
+        )}
+      >
+        {todo.name}
+      </h3>
+
+      {/* Meta info - all in one row */}
+      <div className="flex items-center gap-2 shrink-0">
+        {subtaskCount > 0 && (
+          <span className="text-xs text-muted-foreground whitespace-nowrap">
+            {completedSubtasks} of {subtaskCount}
+          </span>
+        )}
+        {todo.dueDate && (
+          <span className="flex items-center gap-1 text-xs text-muted-foreground whitespace-nowrap">
+            <Calendar className="h-3 w-3" />
+            {format(new Date(todo.dueDate), 'MMM d')}
+          </span>
+        )}
+        {todo.priority !== 'low' && (
+          <Badge
+            variant="secondary"
+            className={cn('text-xs shrink-0', getPriorityColor(todo.priority))}
           >
-            {todo.name}
-          </h3>
-          {/* Meta info */}
-          <div className="flex items-center gap-3 text-xs text-muted-foreground">
-            {subtaskCount > 0 && (
-              <span>
-                {completedSubtasks} of {subtaskCount}
-              </span>
-            )}
-            {todo.dueDate && (
-              <span className="flex items-center gap-1">
-                <Calendar className="h-3 w-3" />
-                {format(new Date(todo.dueDate), 'MMM d')}
-              </span>
-            )}
-          </div>
-        </div>
-        {/* Right side */}
-        <div className="flex items-center gap-2">
-          {todo.priority !== 'low' && (
-            <Badge
-              variant="secondary"
-              className={cn('text-xs', getPriorityColor(todo.priority))}
-            >
-              {getPriorityLabel(todo.priority)}
-            </Badge>
-          )}
-          {isOverdue(todo.dueDate) && (
-            <Badge variant="destructive" className="text-xs">
-              Overdue
-            </Badge>
-          )}
-        </div>
+            {getPriorityLabel(todo.priority)}
+          </Badge>
+        )}
+        {isOverdue(todo.dueDate) && (
+          <Badge variant="destructive" className="text-xs shrink-0">
+            Overdue
+          </Badge>
+        )}
       </div>
 
       {/* Actions Menu */}
       <DropdownMenu>
         <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-          <Button variant="ghost" size="icon" className="h-8 w-8 flex-shrink-0">
+          <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0">
             <MoreVertical className="h-4 w-4" />
           </Button>
         </DropdownMenuTrigger>

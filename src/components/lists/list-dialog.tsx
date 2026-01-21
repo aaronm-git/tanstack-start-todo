@@ -10,17 +10,17 @@ import {
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
 import { Label } from '../ui/label'
-import type { CategoryWithCount } from '../../lib/tasks'
+import type { ListWithCount } from '../../lib/tasks'
 
-interface CategoryDialogProps {
+interface ListDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  onSubmit: (data: CategoryFormData) => void
-  editCategory?: CategoryWithCount | null
+  onSubmit: (data: ListFormData) => void
+  editList?: ListWithCount | null
   isSubmitting?: boolean
 }
 
-export interface CategoryFormData {
+export interface ListFormData {
   name: string
   color: string | null
 }
@@ -40,25 +40,25 @@ const defaultColors = [
   '#ec4899', // pink
 ]
 
-export function CategoryDialog({
+export function ListDialog({
   open,
   onOpenChange,
   onSubmit,
-  editCategory,
+  editList,
   isSubmitting = false,
-}: CategoryDialogProps) {
-  const [formData, setFormData] = useState<CategoryFormData>({
+}: ListDialogProps) {
+  const [formData, setFormData] = useState<ListFormData>({
     name: '',
     color: defaultColors[0],
   })
 
-  // Reset form when dialog opens/closes or editCategory changes
+  // Reset form when dialog opens/closes or editList changes
   useEffect(() => {
     if (open) {
-      if (editCategory) {
+      if (editList) {
         setFormData({
-          name: editCategory.name,
-          color: editCategory.color || defaultColors[0],
+          name: editList.name,
+          color: editList.color || defaultColors[0],
         })
       } else {
         setFormData({
@@ -67,7 +67,7 @@ export function CategoryDialog({
         })
       }
     }
-  }, [open, editCategory])
+  }, [open, editList])
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -79,22 +79,22 @@ export function CategoryDialog({
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
           <DialogTitle>
-            {editCategory ? 'Edit Category' : 'Create New Category'}
+            {editList ? 'Edit List' : 'Create New List'}
           </DialogTitle>
           <DialogDescription>
-            {editCategory
-              ? 'Update your category details below.'
-              : 'Add a new category to organize your todos.'}
+            {editList
+              ? 'Update your list details below.'
+              : 'Add a new list to organize your todos.'}
           </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* Name */}
           <div className="space-y-2">
-            <Label htmlFor="category-name">Name *</Label>
+            <Label htmlFor="list-name">Name *</Label>
             <Input
-              id="category-name"
-              placeholder="Enter category name..."
+              id="list-name"
+              placeholder="Enter list name..."
               value={formData.name}
               onChange={(e) =>
                 setFormData((prev) => ({ ...prev, name: e.target.value }))
@@ -150,7 +150,7 @@ export function CategoryDialog({
             <Button type="submit" disabled={isSubmitting}>
               {isSubmitting
                 ? 'Saving...'
-                : editCategory
+                : editList
                   ? 'Update'
                   : 'Create'}
             </Button>

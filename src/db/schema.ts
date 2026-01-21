@@ -34,7 +34,7 @@ export type RecurrenceType =
   | 'annually'
   | 'custom'
 
-export const categories = pgTable('categories', {
+export const lists = pgTable('lists', {
   id: uuid('id').primaryKey().defaultRandom(),
   name: text('name').notNull().unique(),
   color: text('color'),
@@ -57,13 +57,6 @@ export const todos = pgTable('todos', {
   isComplete: boolean().notNull().default(false),
   dueDate: timestamp({ withTimezone: true }),
 
-  // Nested todos support: Reference to parent todo for creating subtasks
-  // If null, this is a top-level todo. If set, this is a subtask of another todo
-  // @ts-ignore - TypeScript limitation with self-referencing tables
-  parentId: uuid('parent_id').references(() => todos.id, {
-    onDelete: 'cascade',
-  }),
-
   // Recurring todos support
   // If recurrenceType is set, this todo repeats according to the pattern
   recurrenceType: recurrenceTypeEnum('recurrence_type'),
@@ -76,6 +69,7 @@ export const todos = pgTable('todos', {
   // Reference to the original recurring todo template
   // When instances are auto-created, they reference this parent recurring todo
   // The template todo itself has recurrenceType set, instances have this field set
+  // @ts-ignore - TypeScript limitation with self-referencing tables
   recurringTodoId: uuid('recurring_todo_id').references(() => todos.id, {
     onDelete: 'cascade',
   }),
@@ -93,18 +87,30 @@ export const todos = pgTable('todos', {
     .defaultNow()
     .notNull()
     .$onUpdate(() => new Date()),
+  // Each todo belongs to a single list (formerly category). Nullable for todos without a list.
+  listId: uuid('list_id').references(() => lists.id, { onDelete: 'set null' }),
 })
 
-// Join table for many-to-many relationship between todos and categories
-// Defined after todos table to avoid circular reference
-export const todoCategories = pgTable('todo_categories', {
+// Subtasks table: Simple checklist items that belong to a todo
+// Unlike todos, subtasks only have a name - they're meant to be simple like Wunderlist
+export const subtasks = pgTable('subtasks', {
+  id: uuid('id').primaryKey().defaultRandom(),
   todoId: uuid('todo_id')
     .notNull()
     .references(() => todos.id, { onDelete: 'cascade' }),
-  categoryId: uuid('category_id')
+  name: text('name').notNull(),
+  isComplete: boolean('is_complete').notNull().default(false),
+  // Order index for maintaining user-defined order (using integer for simplicity)
+  orderIndex: text('order_index').notNull().default('0'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true })
+    .defaultNow()
     .notNull()
-    .references(() => categories.id, { onDelete: 'cascade' }),
+    .$onUpdate(() => new Date()),
 })
+
+// NOTE: The previous many-to-many join table `todo_lists` has been migrated to a single
+// foreign key `todos.list_id`. The join table definition has been removed.
 
 // Reminders table: Separate table to support multiple reminders per todo
 // This allows users to set multiple reminders (e.g., 1 day before, 1 hour before)
@@ -148,20 +154,14 @@ export const reminders = pgTable('reminders', {
 // Define how the "todos" table relates to others.
 // @ts-ignore - TypeScript limitation with self-referencing relations in Drizzle ORM
 export const todosRelations = relations(todos, ({ many, one }) => ({
-  // A single todo can belong to many categories via the "todoCategories" join table.
-  categories: many(todoCategories),
-
-  // Nested todos: A todo can have many subtasks (children)
-  subtasks: many(todos, {
-    relationName: 'parentSubtasks', // Relation name to distinguish from other self-references
+  // A single todo belongs to one list (formerly a category).
+  list: one(lists, {
+    fields: [todos.listId],
+    references: [lists.id],
   }),
 
-  // Nested todos: A todo can have one parent todo (if it's a subtask)
-  parent: one(todos, {
-    fields: [todos.parentId],
-    references: [todos.id],
-    relationName: 'parentSubtasks',
-  }),
+  // A todo can have many simple subtasks (checklist items)
+  subtasks: many(subtasks),
 
   // Recurring todos: A recurring template can have many instances
   recurringInstances: many(todos, {
@@ -185,27 +185,23 @@ export const todosRelations = relations(todos, ({ many, one }) => ({
   }),
 }))
 
-// Define how the "categories" table relates to others.
-// Here, a single category can have many todos, also via the "todoCategories" join table.
-export const categoriesRelations = relations(categories, ({ many }) => ({
-  // The 'todos' property lets us fetch all todos linked to this category via 'todoCategories'.
-  todos: many(todoCategories),
+// Define how the "lists" table relates to others.
+// Here, a single list can have many todos, also via the "todoLists" join table.
+export const listsRelations = relations(lists, ({ many }) => ({
+  // The 'todos' property lets us fetch all todos that reference this list.
+  todos: many(todos),
 }))
 
 // Define relationships on the join table "todoCategories"
 // This table links todos and categories by their IDs.
-export const todoCategoriesRelations = relations(todoCategories, ({ one }) => ({
-  // Each row here belongs to one todo.
-  // 'fields' tells Drizzle which field on "todoCategories" (todoId) is used for the relation.
-  // 'references' tells Drizzle which field it matches in the "todos" table (id).
+// The join-table relations were removed when migrating to single list ownership.
+
+// Define relationships for subtasks
+export const subtasksRelations = relations(subtasks, ({ one }) => ({
+  // Each subtask belongs to one todo
   todo: one(todos, {
-    fields: [todoCategories.todoId],
+    fields: [subtasks.todoId],
     references: [todos.id],
-  }),
-  // Each row here also belongs to one category (similar structure as above).
-  category: one(categories, {
-    fields: [todoCategories.categoryId],
-    references: [categories.id],
   }),
 }))
 
@@ -232,4 +228,5 @@ export const remindersRelations = relations(reminders, ({ one }) => ({
 // Better Auth Schema Integration
 // ============================================================
 // Import and re-export Better Auth tables so they're included in migrations
+// Backwards-compatibility aliases: expose old names so existing code keeps working.
 export * from '../../auth-schema'

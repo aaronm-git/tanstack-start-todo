@@ -43,28 +43,38 @@ import {
   toggleTodoComplete,
 } from '../lib/server/todos'
 import {
-  getCategories,
-  createCategory,
-  updateCategory,
-  deleteCategory,
+  getLists,
+  createList,
+  updateList,
+  deleteList,
 } from '../lib/server/categories'
+import {
+  createSubtask,
+  updateSubtask,
+  deleteSubtask,
+  toggleSubtaskComplete,
+} from '../lib/server/subtasks'
 
 // Components
 import { TodoList } from '../components/todos/todo-list'
-import { TodoDetailPanel } from '../components/todos/todo-detail-panel'
+import { Details } from '../components/details'
 import { TodoDialog, type TodoFormData } from '../components/todos/todo-dialog'
+import { SubtaskDialog } from '../components/todos/subtask-dialog'
 import { AITodoDialog } from '../components/todos/ai-todo-dialog'
 import { TodoFilters, type TodoFilters as TodoFiltersType } from '../components/todos/todo-filters'
-import { CategorySidebar } from '../components/categories/category-sidebar'
-import { CategoryDialog, type CategoryFormData } from '../components/categories/category-dialog'
+import { Sidebar } from '../components/sidebar'
+import { ListDialog, type ListFormData } from '../components/lists/list-dialog'
 
 import type {
   TodoWithRelations,
-  CategoryWithCount,
+  ListWithCount,
   CreateTodoInput,
   UpdateTodoInput,
-  CreateCategoryInput,
-  UpdateCategoryInput,
+  CreateListInput,
+  UpdateListInput,
+  Subtask,
+  CreateSubtaskInput,
+  UpdateSubtaskInput,
 } from '../lib/tasks'
 
 export const Route = createFileRoute('/dashboard')({
@@ -81,17 +91,19 @@ function DashboardPage() {
   // State for dialogs
   const [todoDialogOpen, setTodoDialogOpen] = useState(false)
   const [aiTodoDialogOpen, setAiTodoDialogOpen] = useState(false)
-  const [categoryDialogOpen, setCategoryDialogOpen] = useState(false)
+  const [listDialogOpen, setListDialogOpen] = useState(false)
   const [editingTodo, setEditingTodo] = useState<TodoWithRelations | null>(null)
-  const [editingCategory, setEditingCategory] = useState<CategoryWithCount | null>(null)
-  const [parentIdForSubtask, setParentIdForSubtask] = useState<string | null>(null)
+  const [editingList, setEditingList] = useState<ListWithCount | null>(null)
+  const [subtaskDialogOpen, setSubtaskDialogOpen] = useState(false)
+  const [todoIdForSubtask, setTodoIdForSubtask] = useState<string | null>(null)
+  const [editingSubtask, setEditingSubtask] = useState<Subtask | null>(null)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [todoToDelete, setTodoToDelete] = useState<string | null>(null)
   const [selectedTodo, setSelectedTodo] = useState<TodoWithRelations | null>(null)
   
   // Mobile sheet state
   const [sidebarOpen, setSidebarOpen] = useState(false)
-  const [detailPanelOpen, setDetailPanelOpen] = useState(false)
+  const [detailsOpen, setDetailsOpen] = useState(false)
 
   // Filters state
   const [filters, setFilters] = useState<TodoFiltersType>({
@@ -121,11 +133,11 @@ function DashboardPage() {
   }, [todos, selectedTodo?.id])
 
   const {
-    data: categories = [],
-    isLoading: categoriesLoading,
+    data: lists = [],
+    isLoading: listsLoading,
   } = useQuery({
-    queryKey: ['categories'],
-    queryFn: () => getCategories({}),
+    queryKey: ['lists'],
+    queryFn: () => getLists({}),
   })
 
   // Mutations with optimistic updates
@@ -143,14 +155,9 @@ function DashboardPage() {
         priority: newTodo.priority ?? 'low',
         isComplete: false,
         dueDate: newTodo.dueDate ?? null,
-        parentId: newTodo.parentId ?? null,
         createdAt: new Date(),
         updatedAt: new Date(),
-        categories: (newTodo.categoryIds ?? []).map((id) => ({
-          todoId: `temp-${Date.now()}`,
-          categoryId: id,
-          category: categories.find((c) => c.id === id)!,
-        })),
+        list: newTodo.listId ? lists.find((c) => c.id === newTodo.listId) || null : null,
         subtasks: [],
       }
       
@@ -167,11 +174,10 @@ function DashboardPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['todos'] })
-      queryClient.invalidateQueries({ queryKey: ['categories'] })
+      queryClient.invalidateQueries({ queryKey: ['lists'] })
       toast.success('Todo created successfully')
       setTodoDialogOpen(false)
       setEditingTodo(null)
-      setParentIdForSubtask(null)
     },
   })
 
@@ -195,7 +201,7 @@ function DashboardPage() {
     },
     onSuccess: (updatedTodo) => {
       queryClient.invalidateQueries({ queryKey: ['todos'] })
-      queryClient.invalidateQueries({ queryKey: ['categories'] })
+      queryClient.invalidateQueries({ queryKey: ['lists'] })
       // Update selected todo if it was the one being edited
       if (selectedTodo && updatedTodo && selectedTodo.id === updatedTodo.id) {
         setSelectedTodo(updatedTodo)
@@ -218,6 +224,11 @@ function DashboardPage() {
         )
       )
       
+      // Also update selectedTodo if it's the one being toggled
+      if (selectedTodo && selectedTodo.id === id) {
+        setSelectedTodo({ ...selectedTodo, isComplete: !selectedTodo.isComplete })
+      }
+      
       return { previousTodos }
     },
     onError: (_err, _id, context) => {
@@ -226,10 +237,6 @@ function DashboardPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['todos'] })
-      // Refresh selected todo if it was toggled
-      if (selectedTodo) {
-        queryClient.invalidateQueries({ queryKey: ['todos'] })
-      }
     },
   })
 
@@ -251,7 +258,7 @@ function DashboardPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['todos'] })
-      queryClient.invalidateQueries({ queryKey: ['categories'] })
+      queryClient.invalidateQueries({ queryKey: ['lists'] })
       // Clear selected todo if it was deleted
       if (selectedTodo && todoToDelete === selectedTodo.id) {
         setSelectedTodo(null)
@@ -260,44 +267,131 @@ function DashboardPage() {
     },
   })
 
-  const createCategoryMutation = useMutation({
-    mutationFn: (data: CreateCategoryInput) => createCategory({ data }),
+  const createListMutation = useMutation({
+    mutationFn: (data: CreateListInput) => createList({ data }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['categories'] })
-      toast.success('Category created successfully')
-      setCategoryDialogOpen(false)
-      setEditingCategory(null)
+      queryClient.invalidateQueries({ queryKey: ['lists'] })
+      toast.success('List created successfully')
+      setListDialogOpen(false)
+      setEditingList(null)
     },
     onError: () => {
-      toast.error('Failed to create category')
+      toast.error('Failed to create list')
     },
   })
 
-  const updateCategoryMutation = useMutation({
-    mutationFn: (data: UpdateCategoryInput) => updateCategory({ data }),
+  const updateListMutation = useMutation({
+    mutationFn: (data: UpdateListInput) => updateList({ data }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['categories'] })
-      toast.success('Category updated successfully')
-      setCategoryDialogOpen(false)
-      setEditingCategory(null)
+      queryClient.invalidateQueries({ queryKey: ['lists'] })
+      toast.success('List updated successfully')
+      setListDialogOpen(false)
+      setEditingList(null)
     },
     onError: () => {
-      toast.error('Failed to update category')
+      toast.error('Failed to update list')
     },
   })
 
-  const deleteCategoryMutation = useMutation({
-    mutationFn: (id: string) => deleteCategory({ data: id }),
+  const deleteListMutation = useMutation({
+    mutationFn: (id: string) => deleteList({ data: id }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['categories'] })
+      queryClient.invalidateQueries({ queryKey: ['lists'] })
       queryClient.invalidateQueries({ queryKey: ['todos'] })
-      toast.success('Category deleted successfully')
+      toast.success('List deleted successfully')
       if (filters.categoryId) {
         setFilters((prev) => ({ ...prev, categoryId: null }))
       }
     },
     onError: () => {
-      toast.error('Failed to delete category')
+      toast.error('Failed to delete list')
+    },
+  })
+
+  // Subtask mutations
+  const createSubtaskMutation = useMutation({
+    mutationFn: (data: CreateSubtaskInput) => createSubtask({ data }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['todos'] })
+      toast.success('Subtask created successfully')
+      setSubtaskDialogOpen(false)
+      setEditingSubtask(null)
+      setTodoIdForSubtask(null)
+    },
+    onError: () => {
+      toast.error('Failed to create subtask')
+    },
+  })
+
+  const updateSubtaskMutation = useMutation({
+    mutationFn: (data: UpdateSubtaskInput) => updateSubtask({ data }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['todos'] })
+      toast.success('Subtask updated successfully')
+      setSubtaskDialogOpen(false)
+      setEditingSubtask(null)
+    },
+    onError: () => {
+      toast.error('Failed to update subtask')
+    },
+  })
+
+  const deleteSubtaskMutation = useMutation({
+    mutationFn: (id: string) => deleteSubtask({ data: id }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['todos'] })
+      toast.success('Subtask deleted successfully')
+    },
+    onError: () => {
+      toast.error('Failed to delete subtask')
+    },
+  })
+
+  const toggleSubtaskCompleteMutation = useMutation({
+    mutationFn: (id: string) => toggleSubtaskComplete({ data: id }),
+    onMutate: async (id) => {
+      await queryClient.cancelQueries({ queryKey: ['todos'] })
+      const previousTodos = queryClient.getQueryData(['todos'])
+      
+      // Optimistically update subtasks within todos
+      queryClient.setQueryData(['todos'], (old: typeof todos = []) =>
+        old.map((todo) => {
+          if (todo.subtasks && todo.subtasks.length > 0) {
+            const hasMatchingSubtask = todo.subtasks.some((st: Subtask) => st.id === id)
+            if (hasMatchingSubtask) {
+              const updatedSubtasks = todo.subtasks.map((subtask: Subtask) =>
+                subtask.id === id
+                  ? { ...subtask, isComplete: !subtask.isComplete }
+                  : subtask
+              )
+              return { ...todo, subtasks: updatedSubtasks }
+            }
+          }
+          return todo
+        })
+      )
+      
+      // Also update selectedTodo if it contains the subtask
+      if (selectedTodo && selectedTodo.subtasks) {
+        const hasMatchingSubtask = selectedTodo.subtasks.some((st: Subtask) => st.id === id)
+        if (hasMatchingSubtask) {
+          const updatedSubtasks = selectedTodo.subtasks.map((subtask: Subtask) =>
+            subtask.id === id
+              ? { ...subtask, isComplete: !subtask.isComplete }
+              : subtask
+          )
+          setSelectedTodo({ ...selectedTodo, subtasks: updatedSubtasks })
+        }
+      }
+      
+      return { previousTodos }
+    },
+    onError: (_err, _id, context) => {
+      queryClient.setQueryData(['todos'], context?.previousTodos)
+      toast.error('Failed to update subtask status')
+    },
+    onSuccess: () => {
+      // Don't invalidate to preserve order
     },
   })
 
@@ -309,7 +403,6 @@ function DashboardPage() {
 
   const handleCreateTodo = () => {
     setEditingTodo(null)
-    setParentIdForSubtask(null)
     setTodoDialogOpen(true)
   }
 
@@ -320,30 +413,53 @@ function DashboardPage() {
   const handleAITodoSuccess = (todo: TodoWithRelations) => {
     // Refresh the queries and select the new todo
     queryClient.invalidateQueries({ queryKey: ['todos'] })
-    queryClient.invalidateQueries({ queryKey: ['categories'] })
+    queryClient.invalidateQueries({ queryKey: ['lists'] })
     setSelectedTodo(todo)
     if (isMobile) {
-      setDetailPanelOpen(true)
+      setDetailsOpen(true)
     }
   }
 
   const handleSelectTodo = (todo: TodoWithRelations) => {
     setSelectedTodo(todo)
     if (isMobile) {
-      setDetailPanelOpen(true)
+      setDetailsOpen(true)
     }
   }
 
   const handleEditTodo = (todo: TodoWithRelations) => {
     setEditingTodo(todo)
-    setParentIdForSubtask(null)
     setTodoDialogOpen(true)
   }
 
-  const handleAddSubtask = (parentId: string) => {
-    setEditingTodo(null)
-    setParentIdForSubtask(parentId)
-    setTodoDialogOpen(true)
+  const handleAddSubtask = (todoId: string) => {
+    setEditingSubtask(null)
+    setTodoIdForSubtask(todoId)
+    setSubtaskDialogOpen(true)
+  }
+
+  const handleEditSubtask = (subtask: Subtask) => {
+    setEditingSubtask(subtask)
+    setTodoIdForSubtask(subtask.todoId)
+    setSubtaskDialogOpen(true)
+  }
+
+  const handleDeleteSubtask = (id: string) => {
+    deleteSubtaskMutation.mutate(id)
+  }
+
+  const handleSubtaskSubmit = (name: string) => {
+    if (editingSubtask) {
+      updateSubtaskMutation.mutate({
+        id: editingSubtask.id,
+        name,
+      })
+    } else if (todoIdForSubtask) {
+      createSubtaskMutation.mutate({
+        name,
+        todoId: todoIdForSubtask,
+      })
+    }
   }
 
   const handleTodoSubmit = (data: TodoFormData) => {
@@ -354,9 +470,9 @@ function DashboardPage() {
     }
   }
 
-  const handleCloseDetailPanel = () => {
+  const handleCloseDetails = () => {
     setSelectedTodo(null)
-    setDetailPanelOpen(false)
+    setDetailsOpen(false)
   }
 
   const handleDeleteTodo = (id: string) => {
@@ -372,21 +488,25 @@ function DashboardPage() {
     }
   }
 
-  const handleCreateCategory = () => {
-    setEditingCategory(null)
-    setCategoryDialogOpen(true)
+  // Check if the todo being deleted has subtasks
+  const todoToDeleteData = todos.find((t) => t.id === todoToDelete)
+  const hasSubtasks = (todoToDeleteData?.subtasks?.length ?? 0) > 0
+
+  const handleCreateList = () => {
+    setEditingList(null)
+    setListDialogOpen(true)
   }
 
-  const handleEditCategory = (category: CategoryWithCount) => {
-    setEditingCategory(category)
-    setCategoryDialogOpen(true)
+  const handleEditList = (list: ListWithCount) => {
+    setEditingList(list)
+    setListDialogOpen(true)
   }
 
-  const handleCategorySubmit = (data: CategoryFormData) => {
-    if (editingCategory) {
-      updateCategoryMutation.mutate({ id: editingCategory.id, ...data })
+  const handleListSubmit = (data: ListFormData) => {
+    if (editingList) {
+      updateListMutation.mutate({ id: editingList.id, ...data })
     } else {
-      createCategoryMutation.mutate(data)
+      createListMutation.mutate(data)
     }
   }
 
@@ -420,12 +540,10 @@ function DashboardPage() {
         return false
       }
 
-      // Category filter
+      // Category filter (now using list)
       if (filters.categoryId) {
-        const hasCategory = todo.categories.some(
-          (c) => c.category.id === filters.categoryId
-        )
-        if (!hasCategory) return false
+        const hasList = todo.list?.id === filters.categoryId
+        if (!hasList) return false
       }
 
       // Status filter
@@ -460,33 +578,34 @@ function DashboardPage() {
 
   // Sidebar content component (reused in desktop and mobile)
   const sidebarContent = (
-    <CategorySidebar
-      categories={categories}
+    <Sidebar
+      categories={lists}
       selectedCategoryId={filters.categoryId}
       onCategorySelect={(id) => {
         handleCategorySelect(id)
         if (isMobile) setSidebarOpen(false)
       }}
-      onCreateCategory={handleCreateCategory}
-      onEditCategory={handleEditCategory}
-      onDeleteCategory={(id) => deleteCategoryMutation.mutate(id)}
+      onCreateCategory={handleCreateList}
+      onEditCategory={handleEditList}
+      onDeleteCategory={(id) => deleteListMutation.mutate(id)}
       totalTodos={todos.length}
-      isLoading={categoriesLoading}
+      isLoading={listsLoading}
     />
   )
 
-  // Detail panel content component (reused in desktop and mobile)
-  const detailPanelContent = (hideClose = false) => (
-    <TodoDetailPanel
+  // Details content component (reused in desktop and mobile)
+  const detailsContent = (hideClose = false) => (
+    <Details
       todo={selectedTodo}
-      onClose={handleCloseDetailPanel}
+      onClose={handleCloseDetails}
       onToggleComplete={(id) => toggleCompleteMutation.mutate(id)}
       onEdit={handleEditTodo}
       onDelete={handleDeleteTodo}
       onAddSubtask={handleAddSubtask}
       onCategoryClick={handleCategoryClick}
-      onEditSubtask={handleEditTodo}
-      onDeleteSubtask={handleDeleteTodo}
+      onEditSubtask={handleEditSubtask}
+      onDeleteSubtask={handleDeleteSubtask}
+      onToggleSubtaskComplete={(id) => toggleSubtaskCompleteMutation.mutate(id)}
       hideCloseButton={hideClose}
     />
   )
@@ -525,7 +644,7 @@ function DashboardPage() {
               </Button>
               <h1 className="text-lg font-semibold truncate">
                 {filters.categoryId
-                  ? categories.find((c) => c.id === filters.categoryId)?.name || 'Todos'
+                  ? lists.find((c) => c.id === filters.categoryId)?.name || 'Todos'
                   : 'My Todos'}
               </h1>
               <Badge variant="secondary" className="text-xs shrink-0">
@@ -601,7 +720,7 @@ function DashboardPage() {
         </header>
 
         {/* Todo List */}
-        <main className="flex-1 overflow-y-auto">
+        <main className="flex-1 overflow-y-auto pb-10">
           <TodoList
             todos={filteredTodos}
             selectedTodoId={selectedTodo?.id || null}
@@ -615,21 +734,21 @@ function DashboardPage() {
         </main>
       </div>
 
-      {/* Desktop Detail Panel */}
+      {/* Desktop Details */}
       <div className="hidden lg:flex h-full overflow-y-auto">
-        {detailPanelContent(false)}
+        {detailsContent(false)}
       </div>
 
-      {/* Mobile Detail Panel Sheet */}
-      <Sheet open={detailPanelOpen && isMobile} onOpenChange={(open) => {
-        setDetailPanelOpen(open)
+      {/* Mobile Details Sheet */}
+      <Sheet open={detailsOpen && isMobile} onOpenChange={(open) => {
+        setDetailsOpen(open)
         if (!open) setSelectedTodo(null)
       }}>
-        <SheetContent side="right" className="w-full sm:max-w-md p-0">
+        <SheetContent side="right" className="w-full sm:max-w-md overflow-y-auto">
           <SheetHeader className="sr-only">
             <SheetTitle>Todo Details</SheetTitle>
           </SheetHeader>
-          {detailPanelContent(true)}
+          {detailsContent(true)}
         </SheetContent>
       </Sheet>
 
@@ -638,12 +757,20 @@ function DashboardPage() {
         open={todoDialogOpen}
         onOpenChange={setTodoDialogOpen}
         onSubmit={handleTodoSubmit}
-        categories={categories}
-        todos={todos}
+        categories={lists}
         editTodo={editingTodo}
-        parentId={parentIdForSubtask}
         isSubmitting={
           createTodoMutation.isPending || updateTodoMutation.isPending
+        }
+      />
+
+      <SubtaskDialog
+        open={subtaskDialogOpen}
+        onOpenChange={setSubtaskDialogOpen}
+        onSubmit={handleSubtaskSubmit}
+        editSubtask={editingSubtask}
+        isSubmitting={
+          createSubtaskMutation.isPending || updateSubtaskMutation.isPending
         }
       />
 
@@ -651,16 +778,16 @@ function DashboardPage() {
         open={aiTodoDialogOpen}
         onOpenChange={setAiTodoDialogOpen}
         onSuccess={handleAITodoSuccess}
-        categories={categories}
+        categories={lists}
       />
 
-      <CategoryDialog
-        open={categoryDialogOpen}
-        onOpenChange={setCategoryDialogOpen}
-        onSubmit={handleCategorySubmit}
-        editCategory={editingCategory}
+      <ListDialog
+        open={listDialogOpen}
+        onOpenChange={setListDialogOpen}
+        onSubmit={handleListSubmit}
+        editList={editingList}
         isSubmitting={
-          createCategoryMutation.isPending || updateCategoryMutation.isPending
+          createListMutation.isPending || updateListMutation.isPending
         }
       />
 
@@ -669,8 +796,9 @@ function DashboardPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Todo</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete this todo? This will also delete all
-              subtasks. This action cannot be undone.
+              {hasSubtasks
+                ? 'Are you sure you want to delete this todo? This will also delete all subtasks. This action cannot be undone.'
+                : 'Are you sure you want to delete this todo? This action cannot be undone.'}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

@@ -7,7 +7,7 @@ Create tasks quickly using natural language. The AI automatically extracts task 
 - Create tasks by describing them in plain English
 - Automatically set priority based on urgency keywords
 - Parse relative dates (tomorrow, next Monday, end of week, etc.)
-- Match tasks to existing categories
+- Match tasks to existing lists
 - Create subtasks when multiple items are mentioned
 - Get structured tasks with descriptions and metadata
 
@@ -52,18 +52,19 @@ Create tasks quickly using natural language. The AI automatically extracts task 
 **Result**:
 - Main Task: "Buy groceries"
   - Due Date: Tomorrow
-  - Subtasks:
-    - "milk"
-    - "eggs"
-    - "bread"
-- Subtasks inherit the parent's priority and due date
+  - Priority: Medium
+  - Subtasks (simple checklist items):
+    - "Buy milk"
+    - "Buy eggs"
+    - "Buy bread"
+- Subtasks are simple checklist items - just a name you can check off
 
-### Task with Category Matching
+### Task with List Matching
 **Input**: "Schedule doctor appointment next week"
 **Result**:
 - Name: "Schedule doctor appointment"
 - Due Date: Next week
-- Categories: Automatically matched if "Health" or similar category exists
+- Lists: Automatically matched if "Health" or similar list exists
 
 ## Tips
 
@@ -78,7 +79,7 @@ Create tasks quickly using natural language. The AI automatically extracts task 
 - Maximum prompt length: 2000 characters
 - Task name: 1-255 characters
 - Description: Maximum 1000 characters
-- Category matching is case-insensitive but requires exact name matches
+- List matching is case-insensitive but requires exact name matches
 - Date parsing works best with common relative date phrases
 
 ## Developer documentation

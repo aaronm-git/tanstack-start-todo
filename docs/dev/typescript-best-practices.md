@@ -27,7 +27,7 @@ function isTodoWithRelations(value: unknown): value is TodoWithRelations {
     typeof value === 'object' &&
     value !== null &&
     'id' in value &&
-    'categories' in value
+    'list' in value
   )
 }
 
@@ -268,10 +268,10 @@ function getTodo(id: string): TodoWithRelations | null {
 }
 
 // ✅ Good - Optional chaining
-const categoryName = todo.categories?.[0]?.category?.name
+const listName = todo.list?.name
 
 // ❌ Bad - Non-null assertion (unsafe)
-const name = todo.categories![0].category!.name
+const name = todo.list!.name
 ```
 
 ### Optional Properties

@@ -2,8 +2,8 @@ import { createServerFn } from '@tanstack/react-start'
 import * as Sentry from '@sentry/tanstackstart-react'
 import { z } from 'zod'
 import { db } from '../../db'
-import { todos, todoCategories } from '../../db/schema'
-import { eq, isNull, desc, asc } from 'drizzle-orm'
+import { todos } from '../../db/schema'
+import { eq, desc, asc } from 'drizzle-orm'
 
 // Import schemas and config from single source of truth
 import {
@@ -14,13 +14,12 @@ import {
   type Todo,
 } from '../tasks'
 
-// Get all todos with their categories and subtasks
+// Get all todos with their list and subtasks
 export const getTodos = createServerFn({ method: 'GET' }).handler(
   async (): Promise<TodoWithRelations[]> => {
     return Sentry.startSpan({ name: 'getTodos' }, async () => {
       const result = await db.query.todos.findMany({
         with: todoWithRelationsQueryConfig,
-        where: isNull(todos.parentId), // Only get top-level todos
         orderBy: [
           desc(todos.priority),
           asc(todos.dueDate),
@@ -60,21 +59,11 @@ export const createTodo = createServerFn({ method: 'POST' })
           description: data.description,
           priority: data.priority,
           dueDate: data.dueDate || null,
-          parentId: data.parentId || null,
+          listId: data.listId ?? null,
         })
         .returning()
 
       const newTodo = (result as Todo[])[0]
-
-      // Assign categories if provided
-      if (data.categoryIds && data.categoryIds.length > 0) {
-        await db.insert(todoCategories).values(
-          data.categoryIds.map((categoryId) => ({
-            todoId: newTodo.id,
-            categoryId,
-          })),
-        )
-      }
 
       // Fetch the complete todo with relations
       const todoWithRelations = await db.query.todos.findFirst({
@@ -91,7 +80,7 @@ export const updateTodo = createServerFn({ method: 'POST' })
   .handler(async (ctx): Promise<TodoWithRelations | undefined> => {
     return Sentry.startSpan({ name: 'updateTodo' }, async () => {
       const data = updateTodoSchema.parse(ctx.data)
-      const { id, categoryIds, ...updateData } = data
+      const { id, listId, ...updateData } = data
 
       // Only update if there are fields to update (spread removes undefined values)
       const hasFieldsToUpdate = Object.values(updateData).some(
@@ -101,20 +90,9 @@ export const updateTodo = createServerFn({ method: 'POST' })
         await db.update(todos).set(updateData).where(eq(todos.id, id))
       }
 
-      // Update categories if provided
-      if (categoryIds !== undefined) {
-        // Remove existing categories
-        await db.delete(todoCategories).where(eq(todoCategories.todoId, id))
-
-        // Add new categories
-        if (categoryIds.length > 0) {
-          await db.insert(todoCategories).values(
-            categoryIds.map((categoryId) => ({
-              todoId: id,
-              categoryId,
-            })),
-          )
-        }
+      // Update listId if provided
+      if (listId !== undefined) {
+        await db.update(todos).set({ listId }).where(eq(todos.id, id))
       }
 
       // Fetch the updated todo with relations
@@ -154,7 +132,7 @@ export const toggleTodoComplete = createServerFn({ method: 'POST' })
     })
   })
 
-// Delete a todo (cascades to subtasks and categories via DB constraints)
+// Delete a todo (cascades to subtasks via DB constraints)
 export const deleteTodo = createServerFn({ method: 'POST' })
   .inputValidator(z.uuid())
   .handler(async (ctx): Promise<{ success: boolean; id: string }> => {
@@ -162,22 +140,6 @@ export const deleteTodo = createServerFn({ method: 'POST' })
       const id = ctx.data
       await db.delete(todos).where(eq(todos.id, id))
       return { success: true, id }
-    })
-  })
-
-// Create a subtask (todo with parentId set)
-export const createSubtask = createServerFn({ method: 'POST' })
-  .inputValidator(
-    createTodoSchema.extend({
-      parentId: z.uuid(),
-    }),
-  )
-  .handler(async (ctx): Promise<TodoWithRelations | undefined> => {
-    return Sentry.startSpan({ name: 'createSubtask' }, async () => {
-      const validated = createTodoSchema.parse(ctx.data)
-      return createTodo({
-        data: { ...validated, parentId: ctx.data.parentId },
-      })
     })
   })
 
@@ -209,8 +171,8 @@ export const getTodoStats = createServerFn({ method: 'GET' }).handler(
       // Get all todos (including subtasks)
       const allTodos = await db.query.todos.findMany()
 
-      // Get all categories
-      const allCategories = await db.query.categories.findMany()
+      // Get all lists
+      const allLists = await db.query.lists.findMany()
 
       // Calculate basic stats
       const totalTasks = allTodos.length
@@ -278,7 +240,7 @@ export const getTodoStats = createServerFn({ method: 'GET' }).handler(
         tasksDueThisWeek,
         overdueTasks,
         recentlyCompleted,
-        totalCategories: allCategories.length,
+        totalCategories: allLists.length,
       }
     })
   },

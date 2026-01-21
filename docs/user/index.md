@@ -6,4 +6,5 @@ Docs for end users: what the app can do and how to use it.
 
 - [Authentication](./authentication.md)
 - [AI Todo Creation](./ai-todo.md)
+- [Subtasks](./subtasks.md)
 

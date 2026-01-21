@@ -3,7 +3,7 @@ import * as Sentry from '@sentry/tanstackstart-react'
 import { chat } from '@tanstack/ai'
 import { openaiText } from '@tanstack/ai-openai'
 import { db } from '../../db'
-import { todos, todoCategories } from '../../db/schema'
+import { todos, subtasks } from '../../db/schema'
 import { eq } from 'drizzle-orm'
 
 // Import schemas from single source of truth
@@ -33,15 +33,15 @@ export const generateTodoWithAI = createServerFn({ method: 'POST' })
   .handler(async (ctx): Promise<TodoWithRelations> => {
     return Sentry.startSpan({ name: 'generateTodoWithAI' }, async () => {
       try {
-        const { prompt, categories } = ctx.data
+        const { prompt, lists: availableLists } = ctx.data
         console.log('[AI] Handler started with prompt:', prompt)
-        console.log('[AI] Categories count:', categories.length)
+        console.log('[AI] Lists count:', availableLists.length)
 
-        // Build category list for the system prompt
-        const categoryList =
-          categories.length > 0
-            ? categories.map((c) => `- ${c.name}`).join('\n')
-            : 'No categories available'
+        // Build list options for the system prompt
+        const listOptions =
+          availableLists.length > 0
+            ? availableLists.map((c) => `- ${c.name}`).join('\n')
+            : 'No lists available'
 
         // Get today's date for context
         const today = new Date()
@@ -62,14 +62,14 @@ When creating a task:
    - urgent: time-sensitive tasks that need immediate attention
    - critical: emergency tasks that must be done ASAP
 4. DUE DATE: Parse relative dates (tomorrow, next Monday, in 3 days, end of week) into ISO 8601 format (YYYY-MM-DD). If no date is mentioned or implied, omit or use null.
-5. CATEGORIES: Match to available categories below. If none match well, return an empty array.
-6. SUBTASKS: If the user mentions multiple items that should be tracked separately, create subtasks for each item. Examples:
+5. LISTS: Match to available lists below. If none match well, return an empty array.
+6. SUBTASKS: Subtasks are simple checklist items with just a name (no description, priority, or date). If the user mentions multiple items that should be tracked separately, create subtasks for each item. Examples:
    - "Buy groceries tomorrow - milk, eggs, and bread" → Main task: "Buy groceries", Subtasks: [{name: "Buy milk"}, {name: "Buy eggs"}, {name: "Buy bread"}]
    - "Call mom" → No subtasks (single action), subtasks: []
    - Only create subtasks when there are clearly multiple distinct items/actions to track.
 
-Available categories:
-${categoryList}
+Available lists:
+${listOptions}
 
 Return a well-structured task based on the user's input.`
 
@@ -88,15 +88,15 @@ Return a well-structured task based on the user's input.`
           JSON.stringify(result, null, 2),
         )
 
-        // Match suggested categories to actual category IDs
-        const categoryIds: string[] = []
-        if (result.suggestedCategories && result.suggestedCategories.length > 0) {
-          for (const suggestedName of result.suggestedCategories) {
-            const matchedCategory = categories.find(
+        // Match suggested lists to actual list IDs
+        const listIds: string[] = []
+        if (result.suggestedLists && result.suggestedLists.length > 0) {
+          for (const suggestedName of result.suggestedLists) {
+            const matchedList = availableLists.find(
               (c) => c.name.toLowerCase() === suggestedName.toLowerCase(),
             )
-            if (matchedCategory) {
-              categoryIds.push(matchedCategory.id)
+            if (matchedList) {
+              listIds.push(matchedList.id)
             }
           }
         }
@@ -112,7 +112,7 @@ Return a well-structured task based on the user's input.`
 
         console.log('[AI] Creating todo in database...')
 
-        // Create the todo in the database
+        // Create the todo in the database, attaching the first matched list (if any)
         const insertResult = await db
           .insert(todos)
           .values({
@@ -120,7 +120,7 @@ Return a well-structured task based on the user's input.`
             description: result.description || '',
             priority: result.priority as Priority,
             dueDate: dueDate,
-            parentId: null,
+            listId: listIds.length > 0 ? listIds[0] : null,
           })
           .returning()
 
@@ -131,26 +131,20 @@ Return a well-structured task based on the user's input.`
         const newTodo = insertResult[0]
         console.log('[AI] Todo created with ID:', newTodo.id)
 
-        // Assign categories if any matched
-        if (categoryIds.length > 0) {
-          await db.insert(todoCategories).values(
-            categoryIds.map((categoryId) => ({
-              todoId: newTodo.id,
-              categoryId,
-            })),
-          )
-          console.log('[AI] Categories assigned:', categoryIds)
+        // (No join table) listId was set on the todo insert above
+        if (listIds.length > 0) {
+          console.log('[AI] Lists assigned:', listIds)
         }
 
         // Create subtasks if any were generated
+        // Subtasks are now simple checklist items with just a name
         if (result.subtasks && result.subtasks.length > 0) {
-          await db.insert(todos).values(
-            result.subtasks.map((subtask) => ({
+          await db.insert(subtasks).values(
+            result.subtasks.map((subtask, index) => ({
               name: subtask.name,
-              description: subtask.description || '',
-              priority: result.priority as Priority,
-              dueDate: dueDate,
-              parentId: newTodo.id,
+              todoId: newTodo.id,
+              isComplete: false,
+              orderIndex: index.toString(), // Use index as order
             })),
           )
           console.log('[AI] Subtasks created:', result.subtasks.length)

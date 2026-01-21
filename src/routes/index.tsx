@@ -223,7 +223,7 @@ function App() {
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">
-                  Categories
+                  Lists
                 </CardTitle>
                 <FolderKanban className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
@@ -389,7 +389,7 @@ function App() {
               </CardHeader>
               <CardContent>
                 <CardDescription className="text-base">
-                  Custom categories and color-coded tags let you organize tasks 
+                  Custom lists and color-coded tags let you organize tasks 
                   your way. Find anything instantly, no matter how complex your workflow.
                 </CardDescription>
               </CardContent>

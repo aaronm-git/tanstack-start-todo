@@ -17,14 +17,14 @@ import { generateTodoWithAI } from '../../lib/server/ai'
 import {
   todoWithRelationsSchema,
   type TodoWithRelations,
-  type CategoryWithCount,
+  type ListWithCount,
 } from '../../lib/tasks'
 
 interface AITodoDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   onSuccess: (todo: TodoWithRelations) => void
-  categories: CategoryWithCount[]
+  categories: ListWithCount[] // Prop name kept as 'categories' for backwards compat with dashboard
 }
 
 const examplePrompts = [
@@ -39,7 +39,7 @@ export function AITodoDialog({
   open,
   onOpenChange,
   onSuccess,
-  categories,
+  categories: lists,
 }: AITodoDialogProps) {
   const [prompt, setPrompt] = useState('')
 
@@ -48,7 +48,7 @@ export function AITodoDialog({
       const result = await generateTodoWithAI({
         data: {
           prompt: userPrompt,
-          categories: categories.map((c) => ({ id: c.id, name: c.name })),
+          lists: lists.map((c) => ({ id: c.id, name: c.name })),
         },
       })
       // Zod parse validates structure and returns properly typed data
