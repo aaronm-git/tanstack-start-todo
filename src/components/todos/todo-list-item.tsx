@@ -1,41 +1,79 @@
+import { useCallback, memo } from 'react'
 import { format } from 'date-fns'
-import { Calendar, MoreVertical } from 'lucide-react'
+import { Calendar } from 'lucide-react'
 import { Checkbox } from '../ui/checkbox'
 import { Badge } from '../ui/badge'
-import { Button } from '../ui/button'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-  DropdownMenuSeparator,
-} from '../ui/dropdown-menu'
+import { EditableInput } from '../ui/editable-input'
 import { cn } from '../../lib/utils'
 import { getPriorityColor, getPriorityLabel, isOverdue } from '../../lib/tasks'
-import type { TodoWithRelations } from '../../lib/tasks'
+import type { TodoWithRelations, Subtask } from '../../lib/tasks'
 
 interface TodoListItemProps {
   todo: TodoWithRelations
   isSelected?: boolean
+  isDraft?: boolean
+  autoFocusName?: boolean
   onToggleComplete: (id: string) => void
   onSelect: (todo: TodoWithRelations) => void
-  onEdit: (todo: TodoWithRelations) => void
+  onUpdateName: (id: string, name: string) => void
   onDelete: (id: string) => void
   onAddSubtask: (parentId: string) => void
+  onCancelDraft?: () => void
 }
 
-export function TodoListItem({
+/**
+ * Memoized todo list item to prevent unnecessary re-renders during inline editing.
+ * Uses custom comparison to only re-render when meaningful data changes.
+ */
+export const TodoListItem = memo(function TodoListItem({
   todo,
   isSelected = false,
+  isDraft = false,
+  autoFocusName = false,
   onToggleComplete,
   onSelect,
-  onEdit,
+  onUpdateName,
   onDelete,
   onAddSubtask,
+  onCancelDraft,
 }: TodoListItemProps) {
   const subtaskCount = todo.subtasks?.length || 0
   const completedSubtasks =
-    todo.subtasks?.filter((st) => st.isComplete).length || 0
+    todo.subtasks?.filter((st: Subtask) => st.isComplete).length || 0
+
+  // Handle name save
+  const handleNameSave = useCallback((name: string) => {
+    if (isDraft && !name.trim()) {
+      // If draft and name is empty, cancel the draft
+      onCancelDraft?.()
+      return
+    }
+    if (name.trim() && name !== todo.name) {
+      onUpdateName(todo.id, name)
+    }
+  }, [isDraft, onCancelDraft, onUpdateName, todo.id, todo.name])
+
+  // Handle row click - select the todo
+  const handleRowClick = useCallback((e: React.MouseEvent) => {
+    // Don't select if clicking on editable input
+    const target = e.target as HTMLElement
+    if (target.closest('[data-editable-container]')) {
+      return
+    }
+    onSelect(todo)
+  }, [onSelect, todo])
+
+  // Handle edit start - select the todo when user starts editing
+  const handleEditStart = useCallback(() => {
+    onSelect(todo)
+  }, [onSelect, todo])
+
+  // Handle cancel for draft mode
+  const handleCancel = useCallback(() => {
+    if (isDraft) {
+      onCancelDraft?.()
+    }
+  }, [isDraft, onCancelDraft])
 
   return (
     <div
@@ -43,27 +81,42 @@ export function TodoListItem({
         'flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-accent/50 transition-colors border-b',
         isSelected && 'bg-accent',
         todo.isComplete && 'opacity-60',
+        isDraft && 'bg-primary/5 border-primary/20',
       )}
-      onClick={() => onSelect(todo)}
+      onClick={handleRowClick}
     >
       {/* Checkbox */}
       <Checkbox
         checked={todo.isComplete}
         onCheckedChange={() => {
-          onToggleComplete(todo.id)
+          if (!isDraft) {
+            onToggleComplete(todo.id)
+          }
         }}
+        disabled={isDraft}
         className="shrink-0"
+        onClick={(e) => e.stopPropagation()}
       />
 
-      {/* Title */}
-      <h3
-        className={cn(
-          'text-sm font-medium flex-1 min-w-0 truncate',
-          todo.isComplete && 'line-through text-muted-foreground',
-        )}
-      >
-        {todo.name}
-      </h3>
+      {/* Editable Title */}
+      <div className="flex-1 min-w-0" onClick={(e) => e.stopPropagation()}>
+        <EditableInput
+          value={todo.name}
+          onSave={handleNameSave}
+          placeholder="Enter task name..."
+          autoFocus={autoFocusName}
+          onCancel={handleCancel}
+          onEditStart={handleEditStart}
+          required={!isDraft}
+          className="w-full"
+          textClassName={cn(
+            'text-sm font-medium truncate',
+            todo.isComplete && 'line-through text-muted-foreground',
+          )}
+          inputClassName="text-sm font-medium"
+          aria-label="Task name"
+        />
+      </div>
 
       {/* Meta info - all in one row */}
       <div className="flex items-center gap-2 shrink-0">
@@ -86,34 +139,12 @@ export function TodoListItem({
             {getPriorityLabel(todo.priority)}
           </Badge>
         )}
-        {isOverdue(todo.dueDate) && (
+        {isOverdue(todo.dueDate) && !isDraft && (
           <Badge variant="destructive" className="text-xs shrink-0">
             Overdue
           </Badge>
         )}
       </div>
-
-      {/* Actions Menu */}
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-          <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0">
-            <MoreVertical className="h-4 w-4" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
-          <DropdownMenuItem onClick={() => onEdit(todo)}>Edit</DropdownMenuItem>
-          <DropdownMenuItem onClick={() => onAddSubtask(todo.id)}>
-            Add Subtask
-          </DropdownMenuItem>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem
-            onClick={() => onDelete(todo.id)}
-            className="text-destructive focus:text-destructive"
-          >
-            Delete
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
     </div>
   )
-}
+})

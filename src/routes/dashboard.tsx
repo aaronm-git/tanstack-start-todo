@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, useCallback } from 'react'
 import { Plus, LogOut, Sun, Moon, Monitor, Menu, Sparkles } from 'lucide-react'
 import { useSession, signOut } from '../lib/auth-client'
 import { useTheme } from '../components/theme-provider'
@@ -32,7 +32,9 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '../components/ui/alert-dialog'
-import { toast } from 'sonner'
+
+// Optimistic operations
+import { mutationKeys, type MutationMeta, type DraftTodo } from '../lib/optimistic-operations'
 
 // Server functions
 import {
@@ -54,12 +56,11 @@ import {
   deleteSubtask,
   toggleSubtaskComplete,
 } from '../lib/server/subtasks'
+import { generateTodoWithAI } from '../lib/server/ai'
 
 // Components
 import { TodoList } from '../components/todos/todo-list'
 import { Details } from '../components/details'
-import { TodoDialog, type TodoFormData } from '../components/todos/todo-dialog'
-import { SubtaskDialog } from '../components/todos/subtask-dialog'
 import { AITodoDialog } from '../components/todos/ai-todo-dialog'
 import { TodoFilters, type TodoFilters as TodoFiltersType } from '../components/todos/todo-filters'
 import { Sidebar } from '../components/sidebar'
@@ -75,7 +76,9 @@ import type {
   Subtask,
   CreateSubtaskInput,
   UpdateSubtaskInput,
+  Priority,
 } from '../lib/tasks'
+import { todoWithRelationsSchema } from '../lib/tasks'
 
 export const Route = createFileRoute('/dashboard')({
   component: DashboardPage,
@@ -88,18 +91,26 @@ function DashboardPage() {
   const { theme, setTheme } = useTheme()
   const isMobile = useIsMobile()
 
-  // State for dialogs
-  const [todoDialogOpen, setTodoDialogOpen] = useState(false)
+  // State for dialogs (only keeping AI dialog and List dialog)
   const [aiTodoDialogOpen, setAiTodoDialogOpen] = useState(false)
   const [listDialogOpen, setListDialogOpen] = useState(false)
-  const [editingTodo, setEditingTodo] = useState<TodoWithRelations | null>(null)
   const [editingList, setEditingList] = useState<ListWithCount | null>(null)
-  const [subtaskDialogOpen, setSubtaskDialogOpen] = useState(false)
-  const [todoIdForSubtask, setTodoIdForSubtask] = useState<string | null>(null)
-  const [editingSubtask, setEditingSubtask] = useState<Subtask | null>(null)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [todoToDelete, setTodoToDelete] = useState<string | null>(null)
+  const [subtaskDeleteDialogOpen, setSubtaskDeleteDialogOpen] = useState(false)
+  const [subtaskToDelete, setSubtaskToDelete] = useState<string | null>(null)
   const [selectedTodo, setSelectedTodo] = useState<TodoWithRelations | null>(null)
+  
+  // Draft todo state for inline creation
+  const [draft, setDraft] = useState<DraftTodo | null>(null)
+  
+  // AI loading todos state - uses overlay/reveal pattern for seamless transition
+  const [aiLoadingTodos, setAiLoadingTodos] = useState<Array<{
+    tempId: string
+    prompt: string
+    resolvedTodo?: TodoWithRelations | null
+    isLoading: boolean
+  }>>([])
   
   // Mobile sheet state
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -114,6 +125,10 @@ function DashboardPage() {
   })
 
   // Queries
+  // Note: We use the cached todos directly instead of useOptimisticData hook
+  // because EditableInput components manage their own local state for optimistic display.
+  // Using useOptimisticData would cause re-renders when mutations become pending,
+  // which loses input focus. The cache is only updated in onSettled (after mutation completes).
   const {
     data: todos = [],
     isLoading: todosLoading,
@@ -140,16 +155,25 @@ function DashboardPage() {
     queryFn: () => getLists({}),
   })
 
-  // Mutations with optimistic updates
+  // Mutations with optimistic updates and tracking via mutation keys
   const createTodoMutation = useMutation({
+    mutationKey: mutationKeys.todos.create(),
     mutationFn: (data: CreateTodoInput) => createTodo({ data }),
+    meta: {
+      operationType: 'create',
+      entityType: 'todo',
+      getEntityName: (vars: unknown) => (vars as CreateTodoInput).name || 'New task',
+    } as MutationMeta,
     onMutate: async (newTodo) => {
       await queryClient.cancelQueries({ queryKey: ['todos'] })
       const previousTodos = queryClient.getQueryData(['todos'])
       
+      // Generate temp ID for tracking
+      const tempId = `temp-${Date.now()}`
+      
       // Optimistically update - create partial object for optimistic UI
       const optimisticTodo = {
-        id: `temp-${Date.now()}`,
+        id: tempId,
         name: newTodo.name,
         description: newTodo.description ?? '',
         priority: newTodo.priority ?? 'low',
@@ -162,58 +186,73 @@ function DashboardPage() {
       }
       
       queryClient.setQueryData(['todos'], (old: typeof todos = []) => [
-        ...old,
         optimisticTodo,
+        ...old,
       ])
       
-      return { previousTodos }
+      return { previousTodos, tempId }
     },
     onError: (_err, _newTodo, context) => {
       queryClient.setQueryData(['todos'], context?.previousTodos)
-      toast.error('Failed to create todo')
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['todos'] })
+    onSuccess: (serverTodo, _variables, context) => {
+      // Replace temp todo with server todo (has real ID)
+      if (serverTodo && context?.tempId) {
+        queryClient.setQueryData(['todos'], (old: typeof todos = []) =>
+          old.map((todo) =>
+            todo.id === context.tempId ? serverTodo : todo
+          )
+        )
+      }
+      // Invalidate lists to update counts
       queryClient.invalidateQueries({ queryKey: ['lists'] })
-      toast.success('Todo created successfully')
-      setTodoDialogOpen(false)
-      setEditingTodo(null)
     },
   })
 
   const updateTodoMutation = useMutation({
+    mutationKey: mutationKeys.todos.update('batch'),
     mutationFn: (data: UpdateTodoInput) => updateTodo({ data }),
-    onMutate: async (updatedTodo) => {
+    meta: {
+      operationType: 'update',
+      entityType: 'todo',
+      getEntityName: (vars: unknown) => (vars as UpdateTodoInput).name || 'Task',
+    } as MutationMeta,
+    onMutate: async () => {
+      // "Via the UI" approach: ONLY cancel queries, do NOT update cache
+      // This prevents re-renders and preserves input focus
+      // Optimistic values are applied at render time via useOptimisticData hook
       await queryClient.cancelQueries({ queryKey: ['todos'] })
-      const previousTodos = queryClient.getQueryData(['todos'])
-      
-      queryClient.setQueryData(['todos'], (old: typeof todos = []) =>
-        old.map((todo) =>
-          todo.id === updatedTodo.id ? { ...todo, ...updatedTodo } : todo
+    },
+    // No onError needed - cache was never updated, nothing to rollback
+    onSettled: (serverTodo, error, variables) => {
+      // Update cache AFTER mutation completes (success or failure)
+      // This happens after the user has finished typing
+      if (!error && serverTodo) {
+        queryClient.setQueryData(['todos'], (old: typeof todos = []) =>
+          old.map((todo) =>
+            todo.id === serverTodo.id ? { ...todo, ...serverTodo } : todo
+          )
         )
-      )
-      
-      return { previousTodos }
-    },
-    onError: (_err, _updatedTodo, context) => {
-      queryClient.setQueryData(['todos'], context?.previousTodos)
-      toast.error('Failed to update todo')
-    },
-    onSuccess: (updatedTodo) => {
-      queryClient.invalidateQueries({ queryKey: ['todos'] })
-      queryClient.invalidateQueries({ queryKey: ['lists'] })
-      // Update selected todo if it was the one being edited
-      if (selectedTodo && updatedTodo && selectedTodo.id === updatedTodo.id) {
-        setSelectedTodo(updatedTodo)
+        // selectedTodo is synced automatically via useEffect when todos changes
+      } else if (error) {
+        // On error, refetch to get true server state
+        queryClient.invalidateQueries({ queryKey: ['todos'] })
       }
-      toast.success('Todo updated successfully')
-      setTodoDialogOpen(false)
-      setEditingTodo(null)
+      // Update list counts if list assignment changed
+      if (variables.listId !== undefined) {
+        queryClient.invalidateQueries({ queryKey: ['lists'] })
+      }
     },
   })
 
   const toggleCompleteMutation = useMutation({
+    mutationKey: mutationKeys.todos.toggle('batch'),
     mutationFn: (id: string) => toggleTodoComplete({ data: id }),
+    meta: {
+      operationType: 'update',
+      entityType: 'todo',
+      getEntityName: () => 'Task status',
+    } as MutationMeta,
     onMutate: async (id) => {
       await queryClient.cancelQueries({ queryKey: ['todos'] })
       const previousTodos = queryClient.getQueryData(['todos'])
@@ -226,129 +265,252 @@ function DashboardPage() {
       
       // Also update selectedTodo if it's the one being toggled
       if (selectedTodo && selectedTodo.id === id) {
-        setSelectedTodo({ ...selectedTodo, isComplete: !selectedTodo.isComplete })
+        setSelectedTodo(prev => prev ? { ...prev, isComplete: !prev.isComplete } : null)
       }
       
       return { previousTodos }
     },
     onError: (_err, _id, context) => {
       queryClient.setQueryData(['todos'], context?.previousTodos)
-      toast.error('Failed to update todo status')
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['todos'] })
+    onSuccess: (serverTodo) => {
+      // Merge server response without refetch
+      // selectedTodo is synced automatically via useEffect when todos changes
+      if (serverTodo) {
+        queryClient.setQueryData(['todos'], (old: typeof todos = []) =>
+          old.map((todo) =>
+            todo.id === serverTodo.id ? { ...todo, ...serverTodo } : todo
+          )
+        )
+      }
     },
   })
 
   const deleteTodoMutation = useMutation({
+    mutationKey: mutationKeys.todos.delete('batch'),
     mutationFn: (id: string) => deleteTodo({ data: id }),
+    meta: {
+      operationType: 'delete',
+      entityType: 'todo',
+      // Get the entity name from the cache before deletion
+      getEntityName: (vars: unknown) => {
+        const id = vars as string
+        const cachedTodos = queryClient.getQueryData(['todos']) as typeof todos | undefined
+        const todo = cachedTodos?.find(t => t.id === id)
+        return todo?.name || 'Task'
+      },
+    } as MutationMeta,
     onMutate: async (id) => {
       await queryClient.cancelQueries({ queryKey: ['todos'] })
       const previousTodos = queryClient.getQueryData(['todos'])
       
+      // Get the todo name before removing for activity log
+      const deletedTodo = (previousTodos as typeof todos)?.find(t => t.id === id)
+      
       queryClient.setQueryData(['todos'], (old: typeof todos = []) =>
         old.filter((todo) => todo.id !== id)
+      )
+      
+      // Clear selected todo if it was deleted
+      if (selectedTodo && selectedTodo.id === id) {
+        setSelectedTodo(null)
+      }
+      
+      return { previousTodos, deletedTodoName: deletedTodo?.name }
+    },
+    onError: (_err, _id, context) => {
+      queryClient.setQueryData(['todos'], context?.previousTodos)
+    },
+    onSuccess: () => {
+      // Only invalidate lists to update counts
+      queryClient.invalidateQueries({ queryKey: ['lists'] })
+    },
+  })
+
+  const createListMutation = useMutation({
+    mutationKey: mutationKeys.lists.create(),
+    mutationFn: (data: CreateListInput) => createList({ data }),
+    meta: {
+      operationType: 'create',
+      entityType: 'list',
+      getEntityName: (vars: unknown) => (vars as CreateListInput).name || 'New list',
+    } as MutationMeta,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['lists'] })
+      setListDialogOpen(false)
+      setEditingList(null)
+    },
+  })
+
+  const updateListMutation = useMutation({
+    mutationKey: mutationKeys.lists.update('batch'),
+    mutationFn: (data: UpdateListInput) => updateList({ data }),
+    meta: {
+      operationType: 'update',
+      entityType: 'list',
+      getEntityName: (vars: unknown) => (vars as UpdateListInput).name || 'List',
+    } as MutationMeta,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['lists'] })
+      setListDialogOpen(false)
+      setEditingList(null)
+    },
+  })
+
+  const deleteListMutation = useMutation({
+    mutationKey: mutationKeys.lists.delete('batch'),
+    mutationFn: (id: string) => deleteList({ data: id }),
+    meta: {
+      operationType: 'delete',
+      entityType: 'list',
+      getEntityName: () => 'List',
+    } as MutationMeta,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['lists'] })
+      queryClient.invalidateQueries({ queryKey: ['todos'] })
+      if (filters.categoryId) {
+        setFilters((prev) => ({ ...prev, categoryId: null }))
+      }
+    },
+  })
+
+  // Subtask mutations with optimistic updates
+  const createSubtaskMutation = useMutation({
+    mutationKey: mutationKeys.subtasks.create(),
+    mutationFn: (data: CreateSubtaskInput) => createSubtask({ data }),
+    meta: {
+      operationType: 'create',
+      entityType: 'subtask',
+      getEntityName: (vars: unknown) => (vars as CreateSubtaskInput).name || 'New subtask',
+    } as MutationMeta,
+    onMutate: async (newSubtask) => {
+      await queryClient.cancelQueries({ queryKey: ['todos'] })
+      const previousTodos = queryClient.getQueryData(['todos'])
+      const tempId = `temp-subtask-${Date.now()}`
+      
+      // Optimistically add subtask to the todo
+      queryClient.setQueryData(['todos'], (old: typeof todos = []) =>
+        old.map((todo) =>
+          todo.id === newSubtask.todoId
+            ? {
+                ...todo,
+                subtasks: [
+                  ...(todo.subtasks || []),
+                  {
+                    id: tempId,
+                    name: newSubtask.name,
+                    isComplete: false,
+                    todoId: newSubtask.todoId,
+                    orderIndex: String((todo.subtasks?.length || 0)),
+                    createdAt: new Date(),
+                    updatedAt: new Date(),
+                  },
+                ],
+              }
+            : todo
+        )
+      )
+      
+      return { previousTodos, tempId, todoId: newSubtask.todoId }
+    },
+    onError: (_err, _newSubtask, context) => {
+      queryClient.setQueryData(['todos'], context?.previousTodos)
+    },
+    onSuccess: (serverSubtask, _variables, context) => {
+      // Replace temp subtask with server subtask
+      if (serverSubtask && context?.tempId) {
+        queryClient.setQueryData(['todos'], (old: typeof todos = []) =>
+          old.map((todo) =>
+            todo.id === context.todoId
+              ? {
+                  ...todo,
+                  subtasks: todo.subtasks?.map((st: Subtask) =>
+                    st.id === context.tempId ? serverSubtask : st
+                  ),
+                }
+              : todo
+          )
+        )
+      }
+    },
+  })
+
+  const updateSubtaskMutation = useMutation({
+    mutationKey: mutationKeys.subtasks.update('batch'),
+    mutationFn: (data: UpdateSubtaskInput) => updateSubtask({ data }),
+    meta: {
+      operationType: 'update',
+      entityType: 'subtask',
+      getEntityName: (vars: unknown) => (vars as UpdateSubtaskInput).name || 'Subtask',
+    } as MutationMeta,
+    onMutate: async () => {
+      // "Via the UI" approach: ONLY cancel queries, do NOT update cache
+      await queryClient.cancelQueries({ queryKey: ['todos'] })
+    },
+    // No onError needed - cache was never updated
+    onSettled: (serverSubtask, error) => {
+      if (!error && serverSubtask) {
+        queryClient.setQueryData(['todos'], (old: typeof todos = []) =>
+          old.map((todo) => ({
+            ...todo,
+            subtasks: todo.subtasks?.map((st: Subtask) =>
+              st.id === serverSubtask.id ? { ...st, ...serverSubtask } : st
+            ),
+          }))
+        )
+      } else if (error) {
+        queryClient.invalidateQueries({ queryKey: ['todos'] })
+      }
+    },
+  })
+
+  const deleteSubtaskMutation = useMutation({
+    mutationKey: mutationKeys.subtasks.delete('batch'),
+    mutationFn: (id: string) => deleteSubtask({ data: id }),
+    meta: {
+      operationType: 'delete',
+      entityType: 'subtask',
+      // Get the subtask name from the cache before deletion
+      getEntityName: (vars: unknown) => {
+        const id = vars as string
+        const cachedTodos = queryClient.getQueryData(['todos']) as typeof todos | undefined
+        for (const todo of cachedTodos || []) {
+          const subtask = todo.subtasks?.find((st: Subtask) => st.id === id)
+          if (subtask) return subtask.name
+        }
+        return 'Subtask'
+      },
+    } as MutationMeta,
+    onMutate: async (id) => {
+      await queryClient.cancelQueries({ queryKey: ['todos'] })
+      const previousTodos = queryClient.getQueryData(['todos'])
+      
+      // Optimistically remove subtask
+      queryClient.setQueryData(['todos'], (old: typeof todos = []) =>
+        old.map((todo) => ({
+          ...todo,
+          subtasks: todo.subtasks?.filter((st: Subtask) => st.id !== id),
+        }))
       )
       
       return { previousTodos }
     },
     onError: (_err, _id, context) => {
       queryClient.setQueryData(['todos'], context?.previousTodos)
-      toast.error('Failed to delete todo')
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['todos'] })
-      queryClient.invalidateQueries({ queryKey: ['lists'] })
-      // Clear selected todo if it was deleted
-      if (selectedTodo && todoToDelete === selectedTodo.id) {
-        setSelectedTodo(null)
-      }
-      toast.success('Todo deleted successfully')
-    },
-  })
-
-  const createListMutation = useMutation({
-    mutationFn: (data: CreateListInput) => createList({ data }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['lists'] })
-      toast.success('List created successfully')
-      setListDialogOpen(false)
-      setEditingList(null)
-    },
-    onError: () => {
-      toast.error('Failed to create list')
-    },
-  })
-
-  const updateListMutation = useMutation({
-    mutationFn: (data: UpdateListInput) => updateList({ data }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['lists'] })
-      toast.success('List updated successfully')
-      setListDialogOpen(false)
-      setEditingList(null)
-    },
-    onError: () => {
-      toast.error('Failed to update list')
-    },
-  })
-
-  const deleteListMutation = useMutation({
-    mutationFn: (id: string) => deleteList({ data: id }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['lists'] })
-      queryClient.invalidateQueries({ queryKey: ['todos'] })
-      toast.success('List deleted successfully')
-      if (filters.categoryId) {
-        setFilters((prev) => ({ ...prev, categoryId: null }))
-      }
-    },
-    onError: () => {
-      toast.error('Failed to delete list')
-    },
-  })
-
-  // Subtask mutations
-  const createSubtaskMutation = useMutation({
-    mutationFn: (data: CreateSubtaskInput) => createSubtask({ data }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['todos'] })
-      toast.success('Subtask created successfully')
-      setSubtaskDialogOpen(false)
-      setEditingSubtask(null)
-      setTodoIdForSubtask(null)
-    },
-    onError: () => {
-      toast.error('Failed to create subtask')
-    },
-  })
-
-  const updateSubtaskMutation = useMutation({
-    mutationFn: (data: UpdateSubtaskInput) => updateSubtask({ data }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['todos'] })
-      toast.success('Subtask updated successfully')
-      setSubtaskDialogOpen(false)
-      setEditingSubtask(null)
-    },
-    onError: () => {
-      toast.error('Failed to update subtask')
-    },
-  })
-
-  const deleteSubtaskMutation = useMutation({
-    mutationFn: (id: string) => deleteSubtask({ data: id }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['todos'] })
-      toast.success('Subtask deleted successfully')
-    },
-    onError: () => {
-      toast.error('Failed to delete subtask')
+      // No need to refetch - optimistic update is the truth
     },
   })
 
   const toggleSubtaskCompleteMutation = useMutation({
+    mutationKey: mutationKeys.subtasks.toggle('batch'),
     mutationFn: (id: string) => toggleSubtaskComplete({ data: id }),
+    meta: {
+      operationType: 'update',
+      entityType: 'subtask',
+      getEntityName: () => 'Subtask status',
+    } as MutationMeta,
     onMutate: async (id) => {
       await queryClient.cancelQueries({ queryKey: ['todos'] })
       const previousTodos = queryClient.getQueryData(['todos'])
@@ -388,10 +550,64 @@ function DashboardPage() {
     },
     onError: (_err, _id, context) => {
       queryClient.setQueryData(['todos'], context?.previousTodos)
-      toast.error('Failed to update subtask status')
     },
     onSuccess: () => {
       // Don't invalidate to preserve order
+    },
+  })
+
+  // AI generation mutation
+  const generateAITodoMutation = useMutation({
+    mutationKey: mutationKeys.ai.generateTodo(),
+    mutationFn: async ({ prompt, tempId }: { prompt: string; tempId: string }) => {
+      const result = await generateTodoWithAI({
+        data: {
+          prompt,
+          lists: lists.map((c) => ({ id: c.id, name: c.name })),
+        },
+      })
+      // Parse and validate the result
+      const parsedTodo = todoWithRelationsSchema.parse(result)
+      return { todo: parsedTodo, tempId }
+    },
+    meta: {
+      operationType: 'create',
+      entityType: 'ai-todo',
+      getEntityName: (vars: unknown) => {
+        const { prompt } = vars as { prompt: string; tempId: string }
+        return prompt.length > 50 ? prompt.slice(0, 47) + '...' : prompt
+      },
+    } as MutationMeta,
+    onSuccess: ({ todo, tempId }) => {
+      // Update the loading todo with resolved data and trigger fade out
+      setAiLoadingTodos((prev) =>
+        prev.map((t) =>
+          t.tempId === tempId
+            ? { ...t, resolvedTodo: todo, isLoading: false }
+            : t
+        )
+      )
+      // Invalidate to ensure the real todo is in the main list
+      queryClient.invalidateQueries({ queryKey: ['todos'] })
+      queryClient.invalidateQueries({ queryKey: ['lists'] })
+      
+      // After fade animation completes (300ms), remove from AI loading list
+      // The real todo will already be showing in the regular todos list
+      setTimeout(() => {
+        setAiLoadingTodos((prev) => prev.filter((t) => t.tempId !== tempId))
+        // Select the new todo after it's fully transitioned
+        if (todo) {
+          setSelectedTodo(todo)
+          if (isMobile) {
+            setDetailsOpen(true)
+          }
+        }
+      }, 350)
+    },
+    onError: (_err, { tempId }) => {
+      // Remove loading todo immediately on error
+      setAiLoadingTodos((prev) => prev.filter((t) => t.tempId !== tempId))
+      // Error is automatically logged to activity by MutationMeta
     },
   })
 
@@ -401,92 +617,192 @@ function DashboardPage() {
     navigate({ to: '/login' })
   }
 
-  const handleCreateTodo = () => {
-    setEditingTodo(null)
-    setTodoDialogOpen(true)
-  }
-
-  const handleAICreateTodo = () => {
-    setAiTodoDialogOpen(true)
-  }
-
-  const handleAITodoSuccess = (todo: TodoWithRelations) => {
-    // Refresh the queries and select the new todo
-    queryClient.invalidateQueries({ queryKey: ['todos'] })
-    queryClient.invalidateQueries({ queryKey: ['lists'] })
-    setSelectedTodo(todo)
+  // Create a new draft todo (inline creation)
+  const handleCreateTodo = useCallback(() => {
+    // Create a new draft with default values
+    const newDraft: DraftTodo = {
+      tempId: `draft-${Date.now()}`,
+      name: '',
+      description: '',
+      priority: 'low',
+      dueDate: null,
+      listId: filters.categoryId, // Use current filter as default list
+      isPersisting: false,
+      createdAt: Date.now(),
+    }
+    setDraft(newDraft)
+    // Select the draft
+    setSelectedTodo({
+      id: newDraft.tempId,
+      name: '',
+      description: '',
+      priority: 'low',
+      isComplete: false,
+      dueDate: null,
+      createdAt: new Date(newDraft.createdAt),
+      updatedAt: new Date(newDraft.createdAt),
+      list: newDraft.listId ? lists.find((c) => c.id === newDraft.listId) || null : null,
+      subtasks: [],
+    })
     if (isMobile) {
       setDetailsOpen(true)
     }
-  }
+  }, [filters.categoryId, lists, isMobile])
 
-  const handleSelectTodo = (todo: TodoWithRelations) => {
-    setSelectedTodo(todo)
-    if (isMobile) {
-      setDetailsOpen(true)
-    }
-  }
-
-  const handleEditTodo = (todo: TodoWithRelations) => {
-    setEditingTodo(todo)
-    setTodoDialogOpen(true)
-  }
-
-  const handleAddSubtask = (todoId: string) => {
-    setEditingSubtask(null)
-    setTodoIdForSubtask(todoId)
-    setSubtaskDialogOpen(true)
-  }
-
-  const handleEditSubtask = (subtask: Subtask) => {
-    setEditingSubtask(subtask)
-    setTodoIdForSubtask(subtask.todoId)
-    setSubtaskDialogOpen(true)
-  }
-
-  const handleDeleteSubtask = (id: string) => {
-    deleteSubtaskMutation.mutate(id)
-  }
-
-  const handleSubtaskSubmit = (name: string) => {
-    if (editingSubtask) {
-      updateSubtaskMutation.mutate({
-        id: editingSubtask.id,
-        name,
+  // Handle draft name change - triggers create mutation on first non-empty name
+  const handleDraftNameChange = useCallback((name: string) => {
+    if (!draft) return
+    
+    if (name.trim() && !draft.isPersisting) {
+      // Start persisting the draft
+      setDraft((prev) => prev ? { ...prev, name, isPersisting: true } : null)
+      
+      // Create the todo
+      createTodoMutation.mutate({
+        name: name.trim(),
+        description: draft.description,
+        priority: draft.priority,
+        dueDate: draft.dueDate,
+        listId: draft.listId,
+      }, {
+        onSuccess: (newTodo) => {
+          // Clear the draft and select the new todo
+          setDraft(null)
+          if (newTodo) {
+            setSelectedTodo(newTodo)
+          }
+        },
+        onError: () => {
+          // Reset draft persisting state so user can try again
+          setDraft((prev) => prev ? { ...prev, isPersisting: false } : null)
+        },
       })
-    } else if (todoIdForSubtask) {
-      createSubtaskMutation.mutate({
-        name,
-        todoId: todoIdForSubtask,
-      })
-    }
-  }
-
-  const handleTodoSubmit = (data: TodoFormData) => {
-    if (editingTodo) {
-      updateTodoMutation.mutate({ id: editingTodo.id, ...data })
     } else {
-      createTodoMutation.mutate(data)
+      // Just update the local draft name
+      setDraft((prev) => prev ? { ...prev, name } : null)
     }
+  }, [draft, createTodoMutation])
+
+  // Cancel draft creation
+  const handleCancelDraft = useCallback(() => {
+    setDraft(null)
+    setSelectedTodo(null)
+    if (isMobile) {
+      setDetailsOpen(false)
+    }
+  }, [isMobile])
+
+  const handleAICreateTodo = useCallback(() => {
+    setAiTodoDialogOpen(true)
+  }, [])
+
+  const handleAIStartGeneration = useCallback((prompt: string) => {
+    // Create optimistic loading todo with overlay
+    const tempId = `ai-loading-${Date.now()}`
+    setAiLoadingTodos((prev) => [...prev, { tempId, prompt, isLoading: true }])
+    
+    // Start AI generation
+    generateAITodoMutation.mutate({ prompt, tempId })
+  }, [generateAITodoMutation])
+
+  const handleAITodoSuccess = () => {
+    // This is not used anymore since mutation handles success
+    // Keeping for backwards compatibility if needed
   }
 
-  const handleCloseDetails = () => {
+  const handleSelectTodo = useCallback((todo: TodoWithRelations) => {
+    // If selecting a different todo, clear any draft
+    if (draft && todo.id !== draft.tempId) {
+      if (!draft.isPersisting && !draft.name.trim()) {
+        setDraft(null)
+      }
+    }
+    setSelectedTodo(todo)
+    if (isMobile) {
+      setDetailsOpen(true)
+    }
+  }, [draft, isMobile])
+
+  // Inline name update for todo list item
+  const handleUpdateTodoName = useCallback((id: string, name: string) => {
+    if (!name.trim()) return
+    // Generate timestamp for consistency
+    const timestamp = new Date()
+    updateTodoMutation.mutate({ id, name, updatedAt: timestamp })
+  }, [updateTodoMutation])
+
+  // Full todo update from details panel
+  const handleUpdateTodo = useCallback((id: string, updates: Partial<{
+    name: string
+    description: string
+    priority: Priority
+    dueDate: Date | null
+    listId: string | null
+  }>) => {
+    // Generate timestamp for consistency between task update and activity log
+    const timestamp = new Date()
+    updateTodoMutation.mutate({ id, ...updates, updatedAt: timestamp })
+  }, [updateTodoMutation])
+
+  // Subtask "add" entry point used outside the details panel.
+  // Details panel handles creation inline; elsewhere we currently no-op.
+  const handleAddSubtask = useCallback((_todoId: string) => {
+    // Intentionally no-op: subtask creation is inline in the Details panel.
+  }, [])
+
+  const handleUpdateSubtask = useCallback((id: string, name: string) => {
+    if (!name.trim()) return
+    updateSubtaskMutation.mutate({ id, name })
+  }, [updateSubtaskMutation])
+
+  const handleDeleteSubtask = useCallback((id: string) => {
+    deleteSubtaskMutation.mutate(id)
+  }, [deleteSubtaskMutation])
+
+  const handleRequestDeleteSubtask = useCallback((id: string) => {
+    setSubtaskToDelete(id)
+    setSubtaskDeleteDialogOpen(true)
+  }, [])
+
+  const handleSubtaskDeleteConfirm = useCallback(() => {
+    if (subtaskToDelete) {
+      deleteSubtaskMutation.mutate(subtaskToDelete)
+      setSubtaskDeleteDialogOpen(false)
+      setSubtaskToDelete(null)
+    }
+  }, [subtaskToDelete, deleteSubtaskMutation])
+
+  const handleCreateSubtaskInline = useCallback((todoId: string, name: string) => {
+    if (!name.trim()) return
+    createSubtaskMutation.mutate({ name, todoId })
+  }, [createSubtaskMutation])
+
+  const handleCloseDetails = useCallback(() => {
+    // If there's an empty draft, cancel it
+    if (draft && !draft.name.trim() && !draft.isPersisting) {
+      setDraft(null)
+    }
     setSelectedTodo(null)
     setDetailsOpen(false)
-  }
+  }, [draft])
 
-  const handleDeleteTodo = (id: string) => {
+  const handleDeleteTodo = useCallback((id: string) => {
     setTodoToDelete(id)
     setDeleteDialogOpen(true)
-  }
+  }, [])
 
-  const handleDeleteConfirm = () => {
+  // Memoized toggle callback to prevent re-renders in TodoListItem
+  const handleToggleComplete = useCallback((id: string) => {
+    toggleCompleteMutation.mutate(id)
+  }, [toggleCompleteMutation])
+
+  const handleDeleteConfirm = useCallback(() => {
     if (todoToDelete) {
       deleteTodoMutation.mutate(todoToDelete)
       setDeleteDialogOpen(false)
       setTodoToDelete(null)
     }
-  }
+  }, [todoToDelete, deleteTodoMutation])
 
   // Check if the todo being deleted has subtasks
   const todoToDeleteData = todos.find((t) => t.id === todoToDelete)
@@ -523,7 +839,19 @@ function DashboardPage() {
 
   // Filter todos
   const filteredTodos = useMemo(() => {
+    // Get IDs of todos currently in the AI loading transition (to avoid duplication)
+    const aiTransitioningIds = new Set(
+      aiLoadingTodos
+        .filter((t) => t.resolvedTodo)
+        .map((t) => t.resolvedTodo!.id)
+    )
+
     return todos.filter((todo) => {
+      // Skip todos that are currently transitioning from AI loading overlay
+      if (aiTransitioningIds.has(todo.id)) {
+        return false
+      }
+
       // Search filter
       if (filters.search) {
         const searchLower = filters.search.toLowerCase()
@@ -552,7 +880,7 @@ function DashboardPage() {
 
       return true
     })
-  }, [todos, filters])
+  }, [todos, filters, aiLoadingTodos])
 
   // Auth check
   if (sessionLoading) {
@@ -593,19 +921,32 @@ function DashboardPage() {
     />
   )
 
+  // Check if selected todo is the draft
+  const isSelectedDraft = Boolean(draft && selectedTodo?.id === draft.tempId)
+
   // Details content component (reused in desktop and mobile)
+  // Memoized subtask toggle callback
+  const handleToggleSubtaskComplete = useCallback((id: string) => {
+    toggleSubtaskCompleteMutation.mutate(id)
+  }, [toggleSubtaskCompleteMutation])
+
   const detailsContent = (hideClose = false) => (
     <Details
       todo={selectedTodo}
+      lists={lists}
+      isDraft={isSelectedDraft}
+      autoFocusName={isSelectedDraft}
       onClose={handleCloseDetails}
-      onToggleComplete={(id) => toggleCompleteMutation.mutate(id)}
-      onEdit={handleEditTodo}
+      onToggleComplete={handleToggleComplete}
+      onUpdateTodo={handleUpdateTodo}
       onDelete={handleDeleteTodo}
-      onAddSubtask={handleAddSubtask}
       onCategoryClick={handleCategoryClick}
-      onEditSubtask={handleEditSubtask}
+      onUpdateSubtask={handleUpdateSubtask}
       onDeleteSubtask={handleDeleteSubtask}
-      onToggleSubtaskComplete={(id) => toggleSubtaskCompleteMutation.mutate(id)}
+      onRequestDeleteSubtask={handleRequestDeleteSubtask}
+      onToggleSubtaskComplete={handleToggleSubtaskComplete}
+      onCreateSubtaskInline={handleCreateSubtaskInline}
+      onCancelDraft={handleCancelDraft}
       hideCloseButton={hideClose}
     />
   )
@@ -725,11 +1066,15 @@ function DashboardPage() {
             todos={filteredTodos}
             selectedTodoId={selectedTodo?.id || null}
             isLoading={todosLoading}
-            onToggleComplete={(id) => toggleCompleteMutation.mutate(id)}
+            draft={draft}
+            aiLoadingTodos={aiLoadingTodos}
+            onToggleComplete={handleToggleComplete}
             onSelectTodo={handleSelectTodo}
-            onEdit={handleEditTodo}
+            onUpdateName={handleUpdateTodoName}
             onDelete={handleDeleteTodo}
             onAddSubtask={handleAddSubtask}
+            onCancelDraft={handleCancelDraft}
+            onDraftNameChange={handleDraftNameChange}
           />
         </main>
       </div>
@@ -752,32 +1097,12 @@ function DashboardPage() {
         </SheetContent>
       </Sheet>
 
-      {/* Dialogs */}
-      <TodoDialog
-        open={todoDialogOpen}
-        onOpenChange={setTodoDialogOpen}
-        onSubmit={handleTodoSubmit}
-        categories={lists}
-        editTodo={editingTodo}
-        isSubmitting={
-          createTodoMutation.isPending || updateTodoMutation.isPending
-        }
-      />
-
-      <SubtaskDialog
-        open={subtaskDialogOpen}
-        onOpenChange={setSubtaskDialogOpen}
-        onSubmit={handleSubtaskSubmit}
-        editSubtask={editingSubtask}
-        isSubmitting={
-          createSubtaskMutation.isPending || updateSubtaskMutation.isPending
-        }
-      />
-
+      {/* Dialogs - Only AI dialog and List dialog remain (inline editing replaces TodoDialog/SubtaskDialog) */}
       <AITodoDialog
         open={aiTodoDialogOpen}
         onOpenChange={setAiTodoDialogOpen}
         onSuccess={handleAITodoSuccess}
+        onStartGeneration={handleAIStartGeneration}
         categories={lists}
       />
 
@@ -805,6 +1130,26 @@ function DashboardPage() {
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleDeleteConfirm}
+              className={buttonVariants({ variant: 'destructive' })}
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={subtaskDeleteDialogOpen} onOpenChange={setSubtaskDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Subtask</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this subtask? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleSubtaskDeleteConfirm}
               className={buttonVariants({ variant: 'destructive' })}
             >
               Delete

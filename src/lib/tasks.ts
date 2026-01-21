@@ -102,6 +102,7 @@ export const updateTodoSchema = z.object({
   dueDate: z.date().optional().nullable(),
   isComplete: z.boolean().optional(),
   listId: z.uuid().optional().nullable(),
+  updatedAt: z.date().optional(), // Optional timestamp to ensure consistency with activity logs
 })
 
 // Create category input schema

@@ -10,6 +10,8 @@ import { Toaster } from 'sonner'
 import AiDevtools from '../lib/ai-devtools'
 import { ThemeProvider } from '../components/theme-provider'
 import { Footer } from '../components/footer'
+import { OptimisticOperationsProvider } from '../lib/optimistic-operations'
+import { GlobalProgressBar, ActivityDrawer } from '../components/optimistic'
 
 import TanStackQueryDevtools from '../integrations/tanstack-query/devtools'
 
@@ -54,9 +56,16 @@ function RootDocument({ children }: { children: React.ReactNode }) {
       </head>
       <body>
         <ThemeProvider defaultTheme="system" storageKey="toodyloo-theme">
-          {children}
-          <Footer />
-          <Toaster position="top-right" richColors closeButton />
+          <OptimisticOperationsProvider>
+            {/* Global progress bar at the very top */}
+            <GlobalProgressBar />
+            {/* Activity drawer (slides down from top when progress bar clicked) */}
+            <ActivityDrawer />
+            
+            {children}
+            <Footer />
+            <Toaster position="top-right" richColors closeButton />
+          </OptimisticOperationsProvider>
           <TanStackDevtools
             config={{
               position: 'bottom-right',

@@ -3,7 +3,7 @@ import * as Sentry from '@sentry/tanstackstart-react'
 import { z } from 'zod'
 import { db } from '../../db'
 import { todos } from '../../db/schema'
-import { eq, desc, asc } from 'drizzle-orm'
+import { eq, desc } from 'drizzle-orm'
 
 // Import schemas and config from single source of truth
 import {
@@ -20,11 +20,7 @@ export const getTodos = createServerFn({ method: 'GET' }).handler(
     return Sentry.startSpan({ name: 'getTodos' }, async () => {
       const result = await db.query.todos.findMany({
         with: todoWithRelationsQueryConfig,
-        orderBy: [
-          desc(todos.priority),
-          asc(todos.dueDate),
-          desc(todos.createdAt),
-        ],
+        orderBy: [desc(todos.createdAt)], // Newest first
       })
       return result as TodoWithRelations[]
     })
@@ -80,19 +76,29 @@ export const updateTodo = createServerFn({ method: 'POST' })
   .handler(async (ctx): Promise<TodoWithRelations | undefined> => {
     return Sentry.startSpan({ name: 'updateTodo' }, async () => {
       const data = updateTodoSchema.parse(ctx.data)
-      const { id, listId, ...updateData } = data
+      const { id, listId, updatedAt, ...updateData } = data
+
+      // Prepare update object with updatedAt if provided
+      const updateObject: Record<string, unknown> = { ...updateData }
+      if (updatedAt !== undefined) {
+        updateObject.updatedAt = updatedAt
+      }
 
       // Only update if there are fields to update (spread removes undefined values)
-      const hasFieldsToUpdate = Object.values(updateData).some(
+      const hasFieldsToUpdate = Object.values(updateObject).some(
         (v) => v !== undefined,
       )
       if (hasFieldsToUpdate) {
-        await db.update(todos).set(updateData).where(eq(todos.id, id))
+        await db.update(todos).set(updateObject).where(eq(todos.id, id))
       }
 
       // Update listId if provided
       if (listId !== undefined) {
-        await db.update(todos).set({ listId }).where(eq(todos.id, id))
+        const listUpdateObject: Record<string, unknown> = { listId }
+        if (updatedAt !== undefined) {
+          listUpdateObject.updatedAt = updatedAt
+        }
+        await db.update(todos).set(listUpdateObject).where(eq(todos.id, id))
       }
 
       // Fetch the updated todo with relations

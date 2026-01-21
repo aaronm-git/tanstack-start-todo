@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Sparkles, Loader2 } from 'lucide-react'
+import { Sparkles } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -12,18 +12,13 @@ import { Button } from '../ui/button'
 import { Textarea } from '../ui/textarea'
 import { Label } from '../ui/label'
 import { toast } from 'sonner'
-import { useMutation } from '@tanstack/react-query'
-import { generateTodoWithAI } from '../../lib/server/ai'
-import {
-  todoWithRelationsSchema,
-  type TodoWithRelations,
-  type ListWithCount,
-} from '../../lib/tasks'
+import type { TodoWithRelations, ListWithCount } from '../../lib/tasks'
 
 interface AITodoDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   onSuccess: (todo: TodoWithRelations) => void
+  onStartGeneration: (prompt: string) => void
   categories: ListWithCount[] // Prop name kept as 'categories' for backwards compat with dashboard
 }
 
@@ -38,33 +33,9 @@ const examplePrompts = [
 export function AITodoDialog({
   open,
   onOpenChange,
-  onSuccess,
-  categories: lists,
+  onStartGeneration,
 }: AITodoDialogProps) {
   const [prompt, setPrompt] = useState('')
-
-  const generateMutation = useMutation({
-    mutationFn: async (userPrompt: string) => {
-      const result = await generateTodoWithAI({
-        data: {
-          prompt: userPrompt,
-          lists: lists.map((c) => ({ id: c.id, name: c.name })),
-        },
-      })
-      // Zod parse validates structure and returns properly typed data
-      return todoWithRelationsSchema.parse(result)
-    },
-    onSuccess: (todo) => {
-      toast.success('Task created with AI!')
-      setPrompt('')
-      onOpenChange(false)
-      onSuccess(todo)
-    },
-    onError: (error) => {
-      console.error('AI generation error:', error)
-      toast.error('Failed to generate task. Please try again or create manually.')
-    },
-  })
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -72,7 +43,10 @@ export function AITodoDialog({
       toast.error('Please enter a task description')
       return
     }
-    generateMutation.mutate(prompt.trim())
+    // Immediately trigger optimistic creation and close dialog
+    onStartGeneration(prompt.trim())
+    setPrompt('')
+    onOpenChange(false)
   }
 
   const handleExampleClick = (example: string) => {
@@ -80,10 +54,10 @@ export function AITodoDialog({
   }
 
   const handleClose = (isOpen: boolean) => {
-    if (!isOpen && !generateMutation.isPending) {
+    if (!isOpen) {
       setPrompt('')
       onOpenChange(false)
-    } else if (isOpen) {
+    } else {
       onOpenChange(true)
     }
   }
@@ -111,7 +85,6 @@ export function AITodoDialog({
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
               rows={4}
-              disabled={generateMutation.isPending}
               className="resize-none"
             />
           </div>
@@ -130,7 +103,6 @@ export function AITodoDialog({
                   size="sm"
                   className="text-xs h-auto py-1 px-2"
                   onClick={() => handleExampleClick(example)}
-                  disabled={generateMutation.isPending}
                 >
                   {example.length > 40 ? example.slice(0, 40) + '...' : example}
                 </Button>
@@ -143,22 +115,12 @@ export function AITodoDialog({
               type="button"
               variant="outline"
               onClick={() => handleClose(false)}
-              disabled={generateMutation.isPending}
             >
               Cancel
             </Button>
-            <Button type="submit" disabled={generateMutation.isPending || !prompt.trim()}>
-              {generateMutation.isPending ? (
-                <>
-                  <Loader2 className="size-4 animate-spin" />
-                  Generating...
-                </>
-              ) : (
-                <>
-                  <Sparkles className="size-4" />
-                  Create Task
-                </>
-              )}
+            <Button type="submit" disabled={!prompt.trim()}>
+              <Sparkles className="size-4" />
+              Create Task
             </Button>
           </DialogFooter>
         </form>

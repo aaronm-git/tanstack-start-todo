@@ -225,6 +225,57 @@ export const remindersRelations = relations(reminders, ({ one }) => ({
 // (This needs to be added to the existing todosRelations)
 
 // ============================================================
+// Activity Log Schema
+// ============================================================
+// Tracks all user operations for the activity log feature
+// This provides persistent, DB-backed activity history
+
+export const operationTypeEnum = pgEnum('operation_type', [
+  'create',
+  'update',
+  'delete',
+])
+
+export const entityTypeEnum = pgEnum('entity_type', [
+  'todo',
+  'subtask',
+  'list',
+  'ai-todo',
+])
+
+export const operationStatusEnum = pgEnum('operation_status', [
+  'pending',
+  'success',
+  'error',
+])
+
+export const activityLogs = pgTable('activity_logs', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  
+  // Operation details
+  operationType: operationTypeEnum('operation_type').notNull(),
+  entityType: entityTypeEnum('entity_type').notNull(),
+  entityId: text('entity_id'), // The ID of the entity (null for failed creates)
+  entityName: text('entity_name').notNull(), // Human-readable name for display
+  
+  // Status tracking
+  status: operationStatusEnum('status').notNull().default('pending'),
+  errorMessage: text('error_message'),
+  sentryEventId: text('sentry_event_id'),
+  
+  // Retry tracking
+  retryCount: text('retry_count').notNull().default('0'),
+  maxRetries: text('max_retries').notNull().default('3'),
+  
+  // Timestamps
+  startedAt: timestamp('started_at', { withTimezone: true }).defaultNow().notNull(),
+  completedAt: timestamp('completed_at', { withTimezone: true }),
+  
+  // User association (optional - for multi-user support)
+  userId: text('user_id'),
+})
+
+// ============================================================
 // Better Auth Schema Integration
 // ============================================================
 // Import and re-export Better Auth tables so they're included in migrations
