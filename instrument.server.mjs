@@ -13,5 +13,8 @@ if (!sentryDsn) {
     tracesSampleRate: 1.0,
     replaysSessionSampleRate: 1.0,
     replaysOnErrorSampleRate: 1.0,
+    integrations: [Sentry.consoleLoggingIntegration({ levels: ["log", "warn", "error"] })],
+    // Enable logs to be sent to Sentry
+    enableLogs: true,
   })
 }
