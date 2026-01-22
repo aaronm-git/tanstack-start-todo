@@ -11,10 +11,4 @@ if (!databaseUrl) {
   )
 }
 
-if (process.env.NETLIFY_DATABASE_URL) {
-  console.info('[db] Using NETLIFY_DATABASE_URL')
-} else {
-  console.info('[db] Using DATABASE_URL')
-}
-
 export const db = drizzle(databaseUrl, { schema })

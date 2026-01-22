@@ -12,6 +12,8 @@ import {
   type ListWithCount,
 } from '../tasks'
 
+import { serverLog, PERF_THRESHOLDS, logIfSlow } from './logging'
+
 // Helper to get todo count for a list
 async function getTodoCount(listId: string): Promise<number> {
   const [result] = await db
@@ -27,17 +29,36 @@ async function getTodoCount(listId: string): Promise<number> {
 // Get all lists with todo counts
 export const getLists = createServerFn({ method: 'GET' }).handler(
   async (): Promise<ListWithCount[]> => {
-    return Sentry.startSpan({ name: 'getLists' }, async () => {
-      const allLists = await db.query.lists.findMany({
-        orderBy: (lists, { asc }) => [asc(lists.name)],
-      })
+    return Sentry.startSpan({ name: 'getLists', op: 'db.query' }, async () => {
+      const startTime = Date.now()
 
-      return Promise.all(
-        allLists.map(async (list) => ({
-          ...list,
-          todoCount: await getTodoCount(list.id),
-        })),
-      )
+      try {
+        const allLists = await db.query.lists.findMany({
+          orderBy: (lists, { asc }) => [asc(lists.name)],
+        })
+
+        const listsWithCounts = await Promise.all(
+          allLists.map(async (list) => ({
+            ...list,
+            todoCount: await getTodoCount(list.id),
+          })),
+        )
+
+        logIfSlow('db.lists.findMany', startTime, PERF_THRESHOLDS.DB_QUERY_SLOW, {
+          count: allLists.length,
+        })
+
+        serverLog.info('list.list.fetched', { count: allLists.length })
+        return listsWithCounts
+      } catch (error) {
+        serverLog.error('list.list.failed', {
+          errorType: error instanceof Error ? error.name : 'Unknown',
+        })
+        Sentry.captureException(error, {
+          tags: { component: 'lists', operation: 'getLists' },
+        })
+        throw error
+      }
     })
   },
 )
@@ -46,18 +67,38 @@ export const getLists = createServerFn({ method: 'GET' }).handler(
 export const getListById = createServerFn({ method: 'GET' })
   .inputValidator(z.uuid())
   .handler(async (ctx): Promise<ListWithCount> => {
-    return Sentry.startSpan({ name: 'getListById' }, async () => {
-      const list = await db.query.lists.findFirst({
-        where: eq(lists.id, ctx.data),
-      })
+    return Sentry.startSpan({ name: 'getListById', op: 'db.query' }, async () => {
+      const startTime = Date.now()
 
-      if (!list) {
-        throw new Error('List not found')
-      }
+      try {
+        const list = await db.query.lists.findFirst({
+          where: eq(lists.id, ctx.data),
+        })
 
-      return {
-        ...list,
-        todoCount: await getTodoCount(list.id),
+        if (!list) {
+          serverLog.warn('list.get.notFound', { listId: ctx.data })
+          throw new Error('List not found')
+        }
+
+        const todoCount = await getTodoCount(list.id)
+
+        logIfSlow('db.lists.findFirst', startTime, PERF_THRESHOLDS.DB_QUERY_SLOW, {
+          listId: ctx.data,
+        })
+
+        return {
+          ...list,
+          todoCount,
+        }
+      } catch (error) {
+        if (!(error instanceof Error && error.message === 'List not found')) {
+          serverLog.error('list.get.failed', { listId: ctx.data })
+          Sentry.captureException(error, {
+            tags: { component: 'lists', operation: 'getListById' },
+            extra: { listId: ctx.data },
+          })
+        }
+        throw error
       }
     })
   })
@@ -66,19 +107,47 @@ export const getListById = createServerFn({ method: 'GET' })
 export const createList = createServerFn({ method: 'POST' })
   .inputValidator(createListSchema)
   .handler(async (ctx): Promise<ListWithCount> => {
-    return Sentry.startSpan({ name: 'createList' }, async () => {
-      const data = createListSchema.parse(ctx.data)
-      const [newList] = await db
-        .insert(lists)
-        .values({
-          name: data.name,
-          color: data.color,
-        })
-        .returning()
+    return Sentry.startSpan({ name: 'createList', op: 'db.insert' }, async () => {
+      const startTime = Date.now()
 
-      return {
-        ...newList,
-        todoCount: 0,
+      try {
+        const data = createListSchema.parse(ctx.data)
+
+        serverLog.info('list.create.started', {
+          hasColor: !!data.color,
+        })
+
+        const [newList] = await db
+          .insert(lists)
+          .values({
+            name: data.name,
+            color: data.color,
+          })
+          .returning()
+
+        const durationMs = Date.now() - startTime
+        serverLog.info('list.create.success', {
+          listId: newList.id,
+          hasColor: !!newList.color,
+          durationMs,
+        })
+
+        logIfSlow('db.lists.insert', startTime, PERF_THRESHOLDS.DB_QUERY_SLOW, {
+          listId: newList.id,
+        })
+
+        return {
+          ...newList,
+          todoCount: 0,
+        }
+      } catch (error) {
+        serverLog.error('list.create.failed', {
+          errorType: error instanceof Error ? error.name : 'Unknown',
+        })
+        Sentry.captureException(error, {
+          tags: { component: 'lists', operation: 'createList' },
+        })
+        throw error
       }
     })
   })
@@ -87,19 +156,56 @@ export const createList = createServerFn({ method: 'POST' })
 export const updateList = createServerFn({ method: 'POST' })
   .inputValidator(updateListSchema)
   .handler(async (ctx): Promise<ListWithCount> => {
-    return Sentry.startSpan({ name: 'updateList' }, async () => {
-      const data = updateListSchema.parse(ctx.data)
-      const { id, ...updateData } = data
+    return Sentry.startSpan({ name: 'updateList', op: 'db.update' }, async () => {
+      const startTime = Date.now()
 
-      const [updated] = await db
-        .update(lists)
-        .set(updateData)
-        .where(eq(lists.id, id))
-        .returning()
+      try {
+        const data = updateListSchema.parse(ctx.data)
+        const { id, ...updateData } = data
 
-      return {
-        ...updated,
-        todoCount: await getTodoCount(id),
+        // Track what fields are being updated
+        const updatedFields = Object.keys(updateData).filter(
+          (key) => updateData[key as keyof typeof updateData] !== undefined,
+        )
+
+        serverLog.info('list.update.started', {
+          listId: id,
+          updatedFields: updatedFields.join(','),
+        })
+
+        const [updated] = await db
+          .update(lists)
+          .set(updateData)
+          .where(eq(lists.id, id))
+          .returning()
+
+        const todoCount = await getTodoCount(id)
+
+        const durationMs = Date.now() - startTime
+        serverLog.info('list.update.success', {
+          listId: id,
+          updatedFieldsCount: updatedFields.length,
+          durationMs,
+        })
+
+        logIfSlow('db.lists.update', startTime, PERF_THRESHOLDS.DB_QUERY_SLOW, {
+          listId: id,
+        })
+
+        return {
+          ...updated,
+          todoCount,
+        }
+      } catch (error) {
+        serverLog.error('list.update.failed', {
+          listId: ctx.data?.id,
+          errorType: error instanceof Error ? error.name : 'Unknown',
+        })
+        Sentry.captureException(error, {
+          tags: { component: 'lists', operation: 'updateList' },
+          extra: { listId: ctx.data?.id },
+        })
+        throw error
       }
     })
   })
@@ -108,10 +214,41 @@ export const updateList = createServerFn({ method: 'POST' })
 export const deleteList = createServerFn({ method: 'POST' })
   .inputValidator(z.uuid())
   .handler(async (ctx): Promise<{ success: boolean; id: string }> => {
-    return Sentry.startSpan({ name: 'deleteList' }, async () => {
+    return Sentry.startSpan({ name: 'deleteList', op: 'db.delete' }, async () => {
       const id = ctx.data
-      await db.delete(lists).where(eq(lists.id, id))
-      return { success: true, id }
+      const startTime = Date.now()
+
+      try {
+        // Get todo count before deleting for logging
+        const todoCount = await getTodoCount(id)
+
+        serverLog.info('list.delete.started', { listId: id, affectedTodos: todoCount })
+
+        await db.delete(lists).where(eq(lists.id, id))
+
+        const durationMs = Date.now() - startTime
+        serverLog.info('list.delete.success', {
+          listId: id,
+          affectedTodos: todoCount,
+          durationMs,
+        })
+
+        logIfSlow('db.lists.delete', startTime, PERF_THRESHOLDS.DB_QUERY_SLOW, {
+          listId: id,
+        })
+
+        return { success: true, id }
+      } catch (error) {
+        serverLog.error('list.delete.failed', {
+          listId: id,
+          errorType: error instanceof Error ? error.name : 'Unknown',
+        })
+        Sentry.captureException(error, {
+          tags: { component: 'lists', operation: 'deleteList' },
+          extra: { listId: id },
+        })
+        throw error
+      }
     })
   })
 

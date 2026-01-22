@@ -15,27 +15,41 @@ import {
   type Priority,
 } from '../tasks'
 
+import { serverLog, PERF_THRESHOLDS, logIfSlow } from './logging'
+
 // Generate and create a todo using AI
 export const generateTodoWithAI = createServerFn({ method: 'POST' })
   .inputValidator((data) => {
-    console.log('[AI] Raw input data:', JSON.stringify(data, null, 2))
     const result = generateTodoInputSchema.safeParse(data)
     if (!result.success) {
-      console.error('[AI] Input validation failed:', result.error.format())
       const errorMessages = result.error.issues
         .map((issue) => `${String(issue.path.join('.'))}: ${issue.message}`)
         .join(', ')
-      throw new Error(`Input validation failed: ${errorMessages}`)
+
+      serverLog.warn('ai.input.validation.failed', {
+        errorCount: result.error.issues.length,
+        fields: result.error.issues.map((i) => String(i.path.join('.'))).join(','),
+      })
+
+      const error = new Error(`Input validation failed: ${errorMessages}`)
+      Sentry.captureException(error, {
+        tags: { component: 'ai', action: 'inputValidation' },
+        extra: { inputData: data, validationErrors: result.error.format() },
+      })
+      throw error
     }
-    console.log('[AI] Input validation passed')
     return result.data
   })
   .handler(async (ctx): Promise<TodoWithRelations> => {
-    return Sentry.startSpan({ name: 'generateTodoWithAI' }, async () => {
+    return Sentry.startSpan({ name: 'generateTodoWithAI', op: 'ai.generate' }, async () => {
+      const startTime = Date.now()
+      const { prompt, lists: availableLists } = ctx.data
+
       try {
-        const { prompt, lists: availableLists } = ctx.data
-        console.log('[AI] Handler started with prompt:', prompt)
-        console.log('[AI] Lists count:', availableLists.length)
+        serverLog.info('ai.generation.started', {
+          promptLength: prompt.length,
+          availableListsCount: availableLists.length,
+        })
 
         // Build list options for the system prompt
         const listOptions =
@@ -73,7 +87,14 @@ ${listOptions}
 
 Return a well-structured task based on the user's input.`
 
-        console.log('[AI] Calling TanStack AI chat with outputSchema...')
+        // Track AI API call timing
+        const aiStartTime = Date.now()
+
+        serverLog.info('ai.openai.request.started', {
+          model: 'gpt-4.1-nano',
+          promptTokenEstimate: Math.ceil(prompt.length / 4),
+          systemPromptLength: systemPrompt.length,
+        })
 
         // Use TanStack AI with outputSchema for structured output
         const result = await chat({
@@ -83,10 +104,23 @@ Return a well-structured task based on the user's input.`
           outputSchema: aiGeneratedTodoSchema,
         })
 
-        console.log(
-          '[AI] AI response validated:',
-          JSON.stringify(result, null, 2),
-        )
+        const aiDurationMs = Date.now() - aiStartTime
+
+        serverLog.info('ai.openai.request.completed', {
+          durationMs: aiDurationMs,
+          generatedPriority: result.priority,
+          hasDueDate: !!result.dueDate,
+          subtasksCount: result.subtasks?.length ?? 0,
+          suggestedListsCount: result.suggestedLists?.length ?? 0,
+        })
+
+        // Warn if AI call was slow
+        if (aiDurationMs > PERF_THRESHOLDS.AI_OPERATION_SLOW) {
+          serverLog.warn('ai.openai.request.slow', {
+            durationMs: aiDurationMs,
+            thresholdMs: PERF_THRESHOLDS.AI_OPERATION_SLOW,
+          })
+        }
 
         // Match suggested lists to actual list IDs
         const listIds: string[] = []
@@ -99,6 +133,11 @@ Return a well-structured task based on the user's input.`
               listIds.push(matchedList.id)
             }
           }
+
+          serverLog.info('ai.lists.matched', {
+            suggestedCount: result.suggestedLists.length,
+            matchedCount: listIds.length,
+          })
         }
 
         // Parse the due date if provided
@@ -107,12 +146,16 @@ Return a well-structured task based on the user's input.`
           const parsed = new Date(result.dueDate)
           if (!isNaN(parsed.getTime())) {
             dueDate = parsed
+          } else {
+            serverLog.warn('ai.dueDate.parseError', {
+              rawDueDate: result.dueDate,
+            })
           }
         }
 
-        console.log('[AI] Creating todo in database...')
+        // Create the todo in the database
+        const dbStartTime = Date.now()
 
-        // Create the todo in the database, attaching the first matched list (if any)
         const insertResult = await db
           .insert(todos)
           .values({
@@ -125,30 +168,35 @@ Return a well-structured task based on the user's input.`
           .returning()
 
         if (!Array.isArray(insertResult) || insertResult.length === 0) {
+          serverLog.error('ai.todo.insert.noResult', {
+            prompt: prompt.substring(0, 100),
+          })
           throw new Error('Failed to create todo - no result returned')
         }
 
         const newTodo = insertResult[0]
-        console.log('[AI] Todo created with ID:', newTodo.id)
-
-        // (No join table) listId was set on the todo insert above
-        if (listIds.length > 0) {
-          console.log('[AI] Lists assigned:', listIds)
-        }
 
         // Create subtasks if any were generated
-        // Subtasks are now simple checklist items with just a name
         if (result.subtasks && result.subtasks.length > 0) {
           await db.insert(subtasks).values(
             result.subtasks.map((subtask, index) => ({
               name: subtask.name,
               todoId: newTodo.id,
               isComplete: false,
-              orderIndex: index.toString(), // Use index as order
+              orderIndex: index.toString(),
             })),
           )
-          console.log('[AI] Subtasks created:', result.subtasks.length)
+
+          serverLog.info('ai.subtasks.created', {
+            todoId: newTodo.id,
+            count: result.subtasks.length,
+          })
         }
+
+        logIfSlow('db.ai.insert', dbStartTime, PERF_THRESHOLDS.DB_QUERY_SLOW, {
+          todoId: newTodo.id,
+          hasSubtasks: (result.subtasks?.length ?? 0) > 0,
+        })
 
         // Fetch the complete todo with relations using shared config
         const todoWithRelations = await db.query.todos.findFirst({
@@ -157,17 +205,41 @@ Return a well-structured task based on the user's input.`
         })
 
         if (!todoWithRelations) {
+          serverLog.error('ai.todo.fetch.notFound', { todoId: newTodo.id })
           throw new Error('Failed to fetch created todo')
         }
 
-        console.log('[AI] Successfully created todo with relations')
+        const totalDurationMs = Date.now() - startTime
+
+        serverLog.info('ai.generation.completed', {
+          todoId: newTodo.id,
+          priority: newTodo.priority,
+          hasListId: !!newTodo.listId,
+          hasDueDate: !!newTodo.dueDate,
+          subtasksCount: result.subtasks?.length ?? 0,
+          aiDurationMs,
+          totalDurationMs,
+        })
+
         return todoWithRelations as TodoWithRelations
       } catch (error) {
-        console.error('[AI] Error in handler:', error)
-        console.error(
-          '[AI] Error stack:',
-          error instanceof Error ? error.stack : 'No stack',
-        )
+        const durationMs = Date.now() - startTime
+
+        serverLog.error('ai.generation.failed', {
+          promptLength: prompt.length,
+          durationMs,
+          errorType: error instanceof Error ? error.name : 'Unknown',
+          errorMessage: error instanceof Error ? error.message : 'Unknown error',
+        })
+
+        Sentry.captureException(error, {
+          tags: { component: 'ai', action: 'generateTodoWithAI' },
+          extra: {
+            promptLength: prompt.length,
+            listsCount: availableLists?.length,
+            durationMs,
+          },
+        })
         throw error
       }
     })

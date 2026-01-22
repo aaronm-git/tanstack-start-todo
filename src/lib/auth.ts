@@ -1,7 +1,7 @@
 import { betterAuth } from 'better-auth'
 import { drizzleAdapter } from 'better-auth/adapters/drizzle'
 import { tanstackStartCookies } from 'better-auth/tanstack-start'
-// import * as Sentry from '@sentry/tanstackstart-react'
+import * as Sentry from '@sentry/tanstackstart-react'
 import { db } from '../db'
 // import { sendEmail } from './server/email'
 
@@ -14,14 +14,17 @@ export const auth = betterAuth({
     minPasswordLength: 2,
     maxPasswordLength: 100,
     /**
-     * Dev-only password reset delivery:
-     * Better Auth generates the reset URL; we log it so you can copy/paste it.
-     * Replace this with a real email provider in production.
+     * Password reset delivery handler
+     * In production, this should send an actual email.
+     * Currently logs to Sentry for monitoring reset requests.
      */
     sendResetPassword: async ({ user, url }, _request) => {
-      // Log the reset URL to console for development
-      console.log(`[Better Auth] Password reset for ${user.email}: ${url}`)
-      
+      // Log password reset request to Sentry (without sensitive data)
+      Sentry.logger.info('auth.password.reset.requested', {
+        hasUserEmail: !!user.email,
+        urlGenerated: !!url,
+      })
+
       // Email sending disabled - uncomment below to re-enable
       // void Sentry.startSpan({ name: 'better-auth:sendResetPassword' }, async () => {
       //   try {
@@ -33,15 +36,19 @@ export const auth = betterAuth({
       //         resetPasswordUrl: url,
       //       },
       //     })
+      //     Sentry.logger.info('auth.password.reset.email.sent', {
+      //       template: 'reset-password',
+      //     })
       //   } catch (error) {
-      //     console.error(`[Better Auth] Failed to send password reset email to ${user.email}:`, error)
+      //     Sentry.logger.error('auth.password.reset.email.failed', {
+      //       errorType: error instanceof Error ? error.name : 'Unknown',
+      //     })
       //     Sentry.captureException(error, {
       //       tags: { component: 'email', action: 'sendResetPassword' },
       //       extra: { userEmail: user.email },
       //     })
       //   }
       // }).catch((error) => {
-      //   console.error(`[Better Auth] Error in email span:`, error)
       //   Sentry.captureException(error)
       // })
     },
@@ -50,4 +57,11 @@ export const auth = betterAuth({
   basePath: '/api/auth',
   secret: process.env.BETTER_AUTH_SECRET!,
   plugins: [tanstackStartCookies()],
+  // Enable session caching for performance
+  session: {
+    cookieCache: {
+      enabled: true,
+      maxAge: 5 * 60, // 5 minutes
+    },
+  },
 })

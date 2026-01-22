@@ -8,10 +8,10 @@ function sanitizeForSentry(variables: unknown): Record<string, unknown> {
   if (!variables || typeof variables !== 'object') {
     return { value: typeof variables }
   }
-  
+
   const sanitized: Record<string, unknown> = {}
   const obj = variables as Record<string, unknown>
-  
+
   for (const [key, value] of Object.entries(obj)) {
     // Skip potentially sensitive fields
     if (
@@ -28,13 +28,46 @@ function sanitizeForSentry(variables: unknown): Record<string, unknown> {
       sanitized[key] = value
     }
   }
-  
+
   return sanitized
 }
 
 /**
+ * Log mutation start to Sentry
+ * Useful for tracking mutation lifecycle
+ */
+export function logMutationStartToSentry(
+  operationType: OperationType,
+  entityType: EntityType,
+  entityId: string | null,
+): void {
+  Sentry.logger.info('mutation.started', {
+    operationType,
+    entityType,
+    hasEntityId: !!entityId,
+  })
+}
+
+/**
+ * Log mutation success to Sentry
+ */
+export function logMutationSuccessToSentry(
+  operationType: OperationType,
+  entityType: EntityType,
+  entityId: string | null,
+  durationMs?: number,
+): void {
+  Sentry.logger.info('mutation.success', {
+    operationType,
+    entityType,
+    entityId: entityId ?? undefined,
+    durationMs: durationMs ?? undefined,
+  })
+}
+
+/**
  * Log a failed mutation to Sentry with rich context
- * 
+ *
  * @returns The Sentry event ID for display in the activity log
  */
 export function logMutationFailureToSentry(
@@ -46,11 +79,23 @@ export function logMutationFailureToSentry(
   retryCount: number,
   maxRetries: number,
 ): string {
+  // Log structured error info
+  Sentry.logger.error('mutation.failed', {
+    operationType,
+    entityType,
+    entityId: entityId ?? undefined,
+    retryCount,
+    maxRetries,
+    retriesExhausted: retryCount >= maxRetries,
+    errorType: error.name,
+    errorMessage: error.message.substring(0, 200),
+  })
+
   const eventId = Sentry.captureException(error, {
     tags: {
       'mutation.type': operationType,
       'mutation.entity': entityType,
-      'mutation.retries_exhausted': 'true',
+      'mutation.retries_exhausted': String(retryCount >= maxRetries),
     },
     extra: {
       entityId,
@@ -61,15 +106,30 @@ export function logMutationFailureToSentry(
       failedAt: new Date().toISOString(),
     },
     // Add fingerprint for better grouping
-    fingerprint: [
-      'mutation-failure',
-      operationType,
-      entityType,
-      error.message,
-    ],
+    fingerprint: ['mutation-failure', operationType, entityType, error.message],
   })
-  
+
   return eventId
+}
+
+/**
+ * Log mutation retry attempt
+ */
+export function logMutationRetryToSentry(
+  operationType: OperationType,
+  entityType: EntityType,
+  entityId: string | null,
+  retryCount: number,
+  maxRetries: number,
+): void {
+  Sentry.logger.warn('mutation.retrying', {
+    operationType,
+    entityType,
+    entityId: entityId ?? undefined,
+    retryCount,
+    maxRetries,
+    remainingRetries: maxRetries - retryCount,
+  })
 }
 
 /**
@@ -99,7 +159,7 @@ export function startMutationSpan<T>(
  */
 export function getFriendlyErrorMessage(error: Error): string {
   const message = error.message.toLowerCase()
-  
+
   // Network errors
   if (
     message.includes('network') ||
@@ -108,12 +168,12 @@ export function getFriendlyErrorMessage(error: Error): string {
   ) {
     return 'Network error. Please check your connection and try again.'
   }
-  
+
   // Timeout errors
   if (message.includes('timeout') || message.includes('timed out')) {
     return 'The request timed out. Please try again.'
   }
-  
+
   // Authentication errors
   if (
     message.includes('unauthorized') ||
@@ -122,22 +182,22 @@ export function getFriendlyErrorMessage(error: Error): string {
   ) {
     return 'Your session has expired. Please sign in again.'
   }
-  
+
   // Permission errors
   if (message.includes('forbidden') || message.includes('403')) {
-    return 'You don\'t have permission to perform this action.'
+    return "You don't have permission to perform this action."
   }
-  
+
   // Not found errors
   if (message.includes('not found') || message.includes('404')) {
     return 'The item could not be found. It may have been deleted.'
   }
-  
+
   // Validation errors
   if (message.includes('validation') || message.includes('invalid')) {
     return 'The data you entered is not valid. Please check and try again.'
   }
-  
+
   // Server errors
   if (
     message.includes('500') ||
@@ -147,7 +207,39 @@ export function getFriendlyErrorMessage(error: Error): string {
   ) {
     return 'Something went wrong on our end. Please try again later.'
   }
-  
+
   // Default message
   return 'Something went wrong. Please try again.'
+}
+
+/**
+ * Log optimistic update applied (client-side)
+ */
+export function logOptimisticUpdateApplied(
+  operationType: OperationType,
+  entityType: EntityType,
+  entityId: string | null,
+): void {
+  Sentry.logger.debug('optimistic.update.applied', {
+    operationType,
+    entityType,
+    entityId: entityId ?? undefined,
+  })
+}
+
+/**
+ * Log optimistic update rolled back (client-side)
+ */
+export function logOptimisticUpdateRolledBack(
+  operationType: OperationType,
+  entityType: EntityType,
+  entityId: string | null,
+  reason: string,
+): void {
+  Sentry.logger.warn('optimistic.update.rolledBack', {
+    operationType,
+    entityType,
+    entityId: entityId ?? undefined,
+    reason,
+  })
 }
