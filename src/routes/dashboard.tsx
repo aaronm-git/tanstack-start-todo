@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState, useMemo, useEffect, useCallback } from 'react'
-import { Plus, LogOut, Sun, Moon, Monitor, Menu, Sparkles } from 'lucide-react'
+import { Plus, LogOut, Sun, Moon, Monitor, Menu, Sparkles, ClipboardList } from 'lucide-react'
 import { useSession, signOut } from '../lib/auth-client'
 import { useTheme } from '../components/theme-provider'
 import { useIsMobile } from '../hooks/use-mobile'
@@ -34,7 +34,7 @@ import {
 } from '../components/ui/alert-dialog'
 
 // Optimistic operations
-import { mutationKeys, type MutationMeta, type DraftTodo } from '../lib/optimistic-operations'
+import { mutationKeys, type MutationMeta, type DraftTodo, useActivityDrawer } from '../lib/optimistic-operations'
 
 // Server functions
 import {
@@ -90,6 +90,7 @@ function DashboardPage() {
   const queryClient = useQueryClient()
   const { theme, setTheme } = useTheme()
   const isMobile = useIsMobile()
+  const { openDrawer } = useActivityDrawer()
 
   // State for dialogs (only keeping AI dialog and List dialog)
   const [aiTodoDialogOpen, setAiTodoDialogOpen] = useState(false)
@@ -1039,6 +1040,11 @@ function DashboardPage() {
                     <Monitor className="mr-2 h-4 w-4" />
                     <span>System</span>
                     {theme === 'system' && <span className="ml-auto">✓</span>}
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={openDrawer}>
+                    <ClipboardList className="mr-2 h-4 w-4" />
+                    Activity Log
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={handleSignOut}>

@@ -4,6 +4,7 @@ import { signIn, signUp } from '../lib/auth-client'
 import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
 import { Label } from '../components/ui/label'
+import { Checkbox } from '../components/ui/checkbox'
 import {
   Card,
   CardContent,
@@ -24,12 +25,20 @@ function LoginPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [name, setName] = useState('')
+  const [acceptedTerms, setAcceptedTerms] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(null)
+
+    // Require terms acceptance for sign up
+    if (isSignUp && !acceptedTerms) {
+      setError('You must accept the Terms of Service and Privacy Policy to create an account')
+      return
+    }
+
     setLoading(true)
 
     try {
@@ -127,7 +136,41 @@ function LoginPage() {
               )}
             </div>
 
-            <Button type="submit" disabled={loading} className="w-full">
+            {isSignUp && (
+              <div className="flex items-start space-x-2 pt-2">
+                <Checkbox
+                  id="terms"
+                  checked={acceptedTerms}
+                  onCheckedChange={(checked) => setAcceptedTerms(checked === true)}
+                  required
+                />
+                <Label
+                  htmlFor="terms"
+                  className="text-sm font-normal leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                >
+                  I agree to the{' '}
+                  <Link
+                    to="/terms-of-service"
+                    target="_blank"
+                    className="underline underline-offset-4 hover:text-primary"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    Terms of Service
+                  </Link>{' '}
+                  and{' '}
+                  <Link
+                    to="/privacy-policy"
+                    target="_blank"
+                    className="underline underline-offset-4 hover:text-primary"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    Privacy Policy
+                  </Link>
+                </Label>
+              </div>
+            )}
+
+            <Button type="submit" disabled={loading || (isSignUp && !acceptedTerms)} className="w-full">
               {loading
                 ? 'Please wait...'
                 : isSignUp
@@ -143,6 +186,7 @@ function LoginPage() {
               onClick={() => {
                 setIsSignUp(!isSignUp)
                 setError(null)
+                setAcceptedTerms(false)
               }}
               className="underline underline-offset-4 hover:text-primary"
             >

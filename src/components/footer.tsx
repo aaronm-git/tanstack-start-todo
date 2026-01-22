@@ -1,10 +1,25 @@
 import { Github, ExternalLink, Linkedin } from 'lucide-react'
+import { Link } from '@tanstack/react-router'
 
 export function Footer() {
   return (
     <footer className="fixed bottom-0 left-0 right-0 z-40 border-t bg-background/95 backdrop-blur supports-backdrop-filter:bg-background/60">
       <div className="container mx-auto px-4 py-3">
-        <div className="flex items-center justify-center gap-4 text-xs text-muted-foreground">
+        <div className="flex items-center justify-center gap-4 text-xs text-muted-foreground flex-wrap">
+          <Link
+            to="/privacy-policy"
+            className="hover:text-foreground transition-colors"
+          >
+            Privacy Policy
+          </Link>
+          <span className="text-muted-foreground/50">•</span>
+          <Link
+            to="/terms-of-service"
+            className="hover:text-foreground transition-colors"
+          >
+            Terms of Service
+          </Link>
+          <span className="text-muted-foreground/50">•</span>
           <a
             href="https://github.com/aaronm-git"
             target="_blank"

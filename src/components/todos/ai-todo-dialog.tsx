@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { Sparkles } from 'lucide-react'
+import { Sparkles, AlertCircle } from 'lucide-react'
+import { Link } from '@tanstack/react-router'
 import {
   Dialog,
   DialogContent,
@@ -11,6 +12,12 @@ import {
 import { Button } from '../ui/button'
 import { Textarea } from '../ui/textarea'
 import { Label } from '../ui/label'
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from '../ui/accordion'
 import { toast } from 'sonner'
 import type { TodoWithRelations, ListWithCount } from '../../lib/tasks'
 
@@ -124,6 +131,34 @@ export function AITodoDialog({
             </Button>
           </DialogFooter>
         </form>
+
+        <Accordion type="single" collapsible className="mt-4 border-t pt-4">
+          <AccordionItem value="privacy-notice" className="border-none">
+            <AccordionTrigger className="text-xs text-muted-foreground hover:no-underline py-2">
+              <div className="flex items-center gap-2">
+                <AlertCircle className="h-3.5 w-3.5" />
+                <span>Privacy & Security Notice</span>
+              </div>
+            </AccordionTrigger>
+            <AccordionContent className="text-xs text-muted-foreground pt-2 pb-0">
+              <p className="leading-relaxed">
+                <strong className="text-foreground">Do not share sensitive information:</strong> When using AI features, 
+                do not include sensitive personal information, confidential data, passwords, financial information, 
+                or any regulated information (such as HIPAA, PCI-DSS, or GDPR-protected data). Your input may be 
+                processed by third-party AI services. For more information, see our{' '}
+                <Link
+                  to="/privacy-policy"
+                  target="_blank"
+                  className="underline underline-offset-4 hover:text-foreground transition-colors"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  Privacy Policy
+                </Link>
+                .
+              </p>
+            </AccordionContent>
+          </AccordionItem>
+        </Accordion>
       </DialogContent>
     </Dialog>
   )
