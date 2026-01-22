@@ -164,7 +164,7 @@ function DashboardPage() {
       operationType: 'create',
       entityType: 'todo',
       getEntityName: (vars: unknown) => (vars as CreateTodoInput).name || 'New task',
-    } as MutationMeta,
+    },
     onMutate: async (newTodo) => {
       await queryClient.cancelQueries({ queryKey: ['todos'] })
       const previousTodos = queryClient.getQueryData(['todos'])
@@ -644,6 +644,14 @@ function DashboardPage() {
       updatedAt: new Date(newDraft.createdAt),
       list: newDraft.listId ? lists.find((c) => c.id === newDraft.listId) || null : null,
       subtasks: [],
+      recurrenceType: null,
+      recurrenceConfig: null,
+      recurringTodoId: null,
+      nextOccurrence: null,
+      isRecurring: false,
+      isArchived: false,
+      isDeleted: false,
+      isFavorite: false,
     })
     if (isMobile) {
       setDetailsOpen(true)
